@@ -228,7 +228,13 @@ export default function EnvelopeEstimator() {
   const [salesLeadFee, setSalesLeadFee] = useState(() => {
     const v = parseFloat(urlParams.get("slf")); return isNaN(v) ? 0 : v;
   });
-  const [levels, setLevels] = useState({ 2: { joist: 16, decking: 20, crane: 100 }, 3: { joist: 16, decking: 20, crane: 100 }, 4: { joist: 16, decking: 20, crane: 100 } });
+  const [openingAllowance, setOpeningAllowance] = useState("15");
+  const [levels, setLevels] = useState({
+    floor1: { joist: "16", decking: "18", crane: "50" },
+    floor2: { joist: "16", decking: "18", crane: "50" },
+    floor3: { joist: "16", decking: "18", crane: "50" },
+    roof: { joist: "16", decking: "18", crane: "50" },
+  });
 
   // Step 4 — Foundation & Sitework
   const [foundationData, setFoundationData] = useState({});
@@ -244,64 +250,82 @@ export default function EnvelopeEstimator() {
   const lr = parseNum(laborRate);
   const sp = parseNum(salesPrice);
 
-  // Panel calc
-  const panelHeight = numStories >= 3 ? 10.5 : numStories === 2 ? 9.5 : 9;
-  const panelWidth = 4;
-  const effectiveArea = panelHeight * panelWidth * (1 - 15 / 100);
-  const perimeter = avgSqft > 0 ? 4 * Math.sqrt(avgSqft) : 0;
-  const wallArea = perimeter * panelHeight * numStories;
-  const autoPanelCount = effectiveArea > 0 ? Math.ceil(wallArea / effectiveArea) : 0;
+  // Panel calc (Excel: H=10, W=12, opening allowance, per-story ROUND)
+  const panelHeight = 10;
+  const panelWidth = 12;
+  const panelArea = panelHeight * panelWidth;
+  const openAllow = parseNum(openingAllowance) / 100;
+  const effectivePanelArea = panelArea * (1 - openAllow);
+  const s1 = parseNum(sqft1);
+  const s2 = numStories >= 2 ? parseNum(sqft2) : 0;
+  const s3 = numStories >= 3 ? parseNum(sqft3) : 0;
+  const s4 = numStories >= 4 ? parseNum(sqft4) : 0;
+  const autoPanelCount = effectivePanelArea > 0
+    ? Math.round(s1 / effectivePanelArea) + (numStories >= 2 ? Math.round(s2 / effectivePanelArea) : 0) + (numStories >= 3 ? Math.round(s3 / effectivePanelArea) : 0) + (numStories >= 4 ? Math.round(s4 / effectivePanelArea) : 0)
+    : 0;
   const finalPanelCount = parseNum(overridePanels) > 0 ? parseNum(overridePanels) : autoPanelCount;
 
-  // Labor hours
+  // Labor hours (Excel: 10 hrs per 100 sqft)
   const wallLaborHoursDefault = Math.round(totalSqft / 100 * 10);
-  const floorLaborHoursDefault = numStories > 1 ? Math.round(totalSqft / 100 * 6) : 0;
+  const floorLaborHoursDefault = Math.round(totalSqft / 100 * 10);
   const wallLaborHours = wallLaborHoursOverride ? parseNum(wallLaborHoursOverride) : wallLaborHoursDefault;
   const floorLaborHours = floorLaborHoursOverride ? parseNum(floorLaborHoursOverride) : floorLaborHoursDefault;
 
-  // Main calculations
+  // Main calculations — matched to Excel v6.1
   const calcs = useMemo(() => {
+    // Wall Materials (Excel Project Setup B87–B97)
     const concreteQty = Math.round(totalSqft / 81 * (1 + 0.10) * 10) / 10;
     const xpsQty = Math.ceil(totalSqft / 32 * (1 + 0.05));
-    const wallConcrete = concreteQty * cc;
-    const wallXPS = xpsQty * 65;
-    const frpConnectors = finalPanelCount * 24 * 2.15;
-    const steelReinforcing = finalPanelCount * 55;
-    const frpRebar = totalSqft * 0.75;
-    const embeds = finalPanelCount * 4 * 12;
-    const forming = finalPanelCount * 35;
-    const miscItems = totalSqft * 1.5;
-    const ldtWalls = totalSqft * 2.5;
+    const wallConcrete = cc * concreteQty;
+    const wallXPS = 130 * xpsQty;
+    const frpConnectors = 1 * xpsQty * 18;
+    const steelReinforcing = 15 * Math.round(24 * totalSqft / 1800);
+    const frpRebar = 1 * Math.round(totalSqft * 0.3);
+    const embeds = 35 * (finalPanelCount * 4);
+    const forming = 10 * Math.round(118 * totalSqft / 1800);
+    const miscItems = 0.5 * totalSqft;
+    const ldtWalls = 4 * (numStories * 8 * finalPanelCount);
     const wallMaterials = wallConcrete + wallXPS + frpConnectors + steelReinforcing + frpRebar + embeds + forming + miscItems + ldtWalls;
 
+    // Wall Labor (Excel Project Setup B106–B109)
     const wallLaborCost = lr * wallLaborHours;
-    const panelInstall = finalPanelCount * 85;
-    const wallBraces = finalPanelCount * 25;
-    const craneWalls = totalSqft > 0 ? (cranePricing[100] || 3500) : 0;
+    const panelInstall = 500 * finalPanelCount;
+    const wallBraces = 15 * (finalPanelCount * 4);
+    const craneWalls = totalSqft > 0 ? 1500 : 0;
     const wallLabor = wallLaborCost + panelInstall + wallBraces + craneWalls;
 
+    // Floor / Deck — per level (Excel Cost Summary C16)
     let floorDeck = 0;
-    if (numStories > 1) {
-      for (let lvl = 2; lvl <= numStories; lvl++) {
-        const cfg = levels[lvl] || { joist: 16, decking: 20, crane: 100 };
-        const floorSqft = lvl === 2 ? parseNum(sqft2) : lvl === 3 ? parseNum(sqft3) : parseNum(sqft4);
-        const joistCost = floorSqft * (joistPricing[cfg.joist] || 7);
-        const deckCost = floorSqft * (deckingPricing[cfg.decking] || 4.5);
-        const craneCost = cranePricing[cfg.crane] || 3500;
-        const topCoat = floorSqft * 3;
-        const miscSteel = floorSqft * 2;
-        const ldtDeck = floorSqft * 2;
-        floorDeck += joistCost + deckCost + craneCost + topCoat + miscSteel + ldtDeck;
+    if (numStories >= 2) {
+      for (let i = 1; i < numStories; i++) {
+        const lvl = i === 1 ? levels.floor1 : i === 2 ? levels.floor2 : levels.floor3;
+        const joistCost = (joistPricing[parseInt(lvl.joist)] || 7) * avgSqft;
+        const deckCost = (deckingPricing[parseInt(lvl.decking)] || 5) * avgSqft;
+        const craneCost = cranePricing[parseInt(lvl.crane)] || 1500;
+        const topCoat = cc * Math.round(avgSqft / 150 * 10) / 10;
+        const miscSteel = 1500;
+        const ldtDeck = 4 * Math.round(180 * totalSqft / 1800);
+        const pumpTruck = 1500;
+        const installLabor = lr * floorLaborHours / 2;
+        const concreteInstall = 1.4 * avgSqft;
+        const miscLabor = 0.5 * avgSqft;
+        floorDeck += joistCost + deckCost + craneCost + topCoat + miscSteel + ldtDeck + pumpTruck + installLabor + concreteInstall + miscLabor;
       }
-      const floorLabor = lr * floorLaborHours;
-      floorDeck += floorLabor;
     }
 
-    const roofMaterials = totalSqft * 4.5;
-    const roofLabor = totalSqft * 3.5;
-    const roofCrane = totalSqft > 0 ? (cranePricing[100] || 3500) : 0;
-    const roofMisc = totalSqft * 2.5;
-    const roof = roofMaterials + roofLabor + roofCrane + roofMisc;
+    // Roof — same as one floor level + TPO membrane (Excel Cost Summary C17)
+    const roofJoist = (joistPricing[parseInt(levels.roof.joist)] || 7) * avgSqft;
+    const roofDeck = (deckingPricing[parseInt(levels.roof.decking)] || 5) * avgSqft;
+    const roofCrane = totalSqft > 0 ? (cranePricing[parseInt(levels.roof.crane)] || 1500) : 0;
+    const roofTopCoat = cc * Math.round(avgSqft / 150 * 10) / 10;
+    const roofMembrane = 5 * avgSqft;
+    const roofMiscSteel = totalSqft > 0 ? 1500 : 0;
+    const roofLDT = 4 * Math.round(180 * totalSqft / 1800);
+    const roofPumpTruck = totalSqft > 0 ? 1500 : 0;
+    const roofInstallLabor = lr * floorLaborHours / 2;
+    const roofConcreteInstall = 1.4 * avgSqft;
+    const roofMiscLabor = 0.5 * avgSqft;
+    const roof = roofJoist + roofDeck + roofCrane + roofTopCoat + roofMembrane + roofMiscSteel + roofLDT + roofPumpTruck + roofInstallLabor + roofConcreteInstall + roofMiscLabor;
 
     const structureSubtotal = wallMaterials + wallLabor + floorDeck + roof;
     const techFee = techFeePerSqft * totalSqft;
@@ -460,14 +484,35 @@ export default function EnvelopeEstimator() {
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-gray-800">NileBuilt Setup</h2>
       <p className="text-sm text-gray-500">Panel configuration and labor estimates.</p>
-      <NumberInput label="Override Panel Count" value={overridePanels} onChange={setOverridePanels} placeholder={`Auto: ${autoPanelCount}`} hint="Leave blank to use auto-calculated count" />
+      <div className="grid grid-cols-2 gap-3">
+        <NumberInput label="Opening Allowance %" value={openingAllowance} onChange={setOpeningAllowance} placeholder="15" hint="Doors/windows (default 15%)" />
+        <NumberInput label="Override Panel Count" value={overridePanels} onChange={setOverridePanels} placeholder={`Auto: ${autoPanelCount}`} hint="Leave blank for auto" />
+      </div>
       <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: BRAND.primaryBg }}>
         <span className="font-semibold" style={{ color: BRAND.primaryDark }}>Panels: {finalPanelCount}</span>
-        <span className="ml-4 text-gray-500">Panel size: {panelWidth}′ × {panelHeight}′</span>
+        <span className="ml-4 text-gray-500">Panel: {panelWidth}′ × {panelHeight}′ = {panelArea} sqft ({parseNum(openingAllowance)}% opening)</span>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <NumberInput label="Wall Labor Hours" value={wallLaborHoursOverride} onChange={setWallLaborHoursOverride} placeholder={`Auto: ${wallLaborHoursDefault}`} hint="Adjust for your market if needed" />
-        {numStories > 1 && <NumberInput label="Floor Labor Hours" value={floorLaborHoursOverride} onChange={setFloorLaborHoursOverride} placeholder={`Auto: ${floorLaborHoursDefault}`} hint="Adjust for your market if needed" />}
+        <NumberInput label="Floor/Deck Labor Hours" value={floorLaborHoursOverride} onChange={setFloorLaborHoursOverride} placeholder={`Auto: ${floorLaborHoursDefault}`} hint="Adjust for your market if needed" />
+      </div>
+      {/* Per-Level Selections */}
+      <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+        <h3 className="font-semibold text-gray-700 text-sm">Per-Level Selections</h3>
+        {[...(numStories >= 2 ? Array.from({ length: numStories - 1 }, (_, i) => ({ key: i === 0 ? "floor1" : i === 1 ? "floor2" : "floor3", label: `Floor ${i + 1}` })) : []), { key: "roof", label: "Roof" }].map(({ key, label }) => (
+          <div key={key} className="grid grid-cols-4 gap-2 items-end">
+            <div className="text-sm font-medium text-gray-600 self-center">{label}</div>
+            <select className="border rounded-lg px-2 py-1.5 text-sm bg-white" value={levels[key]?.joist || "16"} onChange={(e) => setLevels((p) => ({ ...p, [key]: { ...p[key], joist: e.target.value } }))}>
+              {Object.keys(joistPricing).map((j) => <option key={j} value={j}>{j}″ Joist</option>)}
+            </select>
+            <select className="border rounded-lg px-2 py-1.5 text-sm bg-white" value={levels[key]?.decking || "18"} onChange={(e) => setLevels((p) => ({ ...p, [key]: { ...p[key], decking: e.target.value } }))}>
+              {Object.keys(deckingPricing).map((g) => <option key={g} value={g}>{g}ga Deck</option>)}
+            </select>
+            <select className="border rounded-lg px-2 py-1.5 text-sm bg-white" value={levels[key]?.crane || "50"} onChange={(e) => setLevels((p) => ({ ...p, [key]: { ...p[key], crane: e.target.value } }))}>
+              {Object.keys(cranePricing).map((t) => <option key={t} value={t}>{t}-ton Crane</option>)}
+            </select>
+          </div>
+        ))}
       </div>
       {adminMode && (
         <div className="border-t pt-4 mt-4">
