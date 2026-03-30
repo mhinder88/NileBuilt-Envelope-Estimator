@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { CheckCircle, ArrowLeft, ArrowRight, Building2, Settings2, BarChart3, ClipboardList, Lock, Unlock, Send, AlertCircle, Landmark, Trash2, Plus } from "lucide-react";
+import { CheckCircle, ArrowLeft, ArrowRight, Building2, Settings2, BarChart3, ClipboardList, Lock, Unlock, Send, AlertCircle, Landmark } from "lucide-react";
 
 // ─── BRAND ────────────────────────────────────────────────────────────────────
 const BRAND = {
@@ -29,11 +29,27 @@ const JOIST_PRICING = { 12: 6, 14: 6.5, 16: 7 };
 const DECKING_PRICING = { 14: 7, 16: 6, 18: 5, 20: 4.5, 22: 4, 24: 3.5 };
 const CRANE_PRICING = { 50: 1500, 75: 2500, 100: 3500, 125: 4000, 150: 5000 };
 
+const FOUNDATION_ITEMS = [
+  { name: "Footings", id: "footings" },
+  { name: "Foundation Walls", id: "foundation" },
+  { name: "Slab", id: "slab" },
+  { name: "Waste / Slab Overpour", id: "wasteSlab" },
+  { name: "Excavation / Soil", id: "excavation" },
+];
+
+const ADMIN_PASSWORD = "nilebuilt2024";
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const fmt = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
 const fmtDec = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 const pct = (n) => (n * 100).toFixed(1) + "%";
 const parseNum = (v) => { const n = parseFloat(String(v).replace(/[^0-9.-]/g, "")); return isNaN(n) ? 0 : n; };
+const calcLineItem = (bid, units, price) => {
+  const b = parseNum(bid); const u = parseNum(units); const p = parseNum(price);
+  if (b) return b;
+  if (u && p) return u * p;
+  return 0;
+};
 
 // ─── REUSABLE INPUTS ─────────────────────────────────────────────────────────
 function CurrencyInput({ value, onChange, placeholder, label, hint, error }) {
@@ -101,6 +117,29 @@ function DisplayField({ label, value, sub }) {
   );
 }
 
+function LineItemRow({ item, data, onChange, totalSqft }) {
+  const cost = calcLineItem(data.bid, data.units, data.price);
+  const perSqft = totalSqft > 0 ? cost / totalSqft : 0;
+  return (
+    <div className="grid grid-cols-12 gap-2 items-center py-2 border-b border-gray-100 last:border-0">
+      <div className="col-span-12 sm:col-span-3 text-sm font-medium text-gray-700 truncate" title={item}>{item}</div>
+      <div className="col-span-4 sm:col-span-3">
+        <CurrencyInput value={data.bid} onChange={(v) => onChange({ ...data, bid: v })} placeholder="Bid $" />
+      </div>
+      <div className="col-span-3 sm:col-span-2">
+        <NumberInput value={data.units} onChange={(v) => onChange({ ...data, units: v })} placeholder="# Units" />
+      </div>
+      <div className="col-span-3 sm:col-span-2">
+        <CurrencyInput value={data.price} onChange={(v) => onChange({ ...data, price: v })} placeholder="$/unit" />
+      </div>
+      <div className="col-span-2 text-right">
+        <div className="text-sm font-semibold text-gray-800">{fmt(cost)}</div>
+        <div className="text-xs text-gray-400">{fmtDec(perSqft)}/sf</div>
+      </div>
+    </div>
+  );
+}
+
 function ProgressBar({ steps, current }) {
   return (
     <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-200 overflow-x-auto">
@@ -149,7 +188,6 @@ export default function EnvelopeEstimator() {
   const [laborRate, setLaborRate] = useState("40");
 
   // Step 3 — NileBuilt Setup
-  const [openingAllowance, setOpeningAllowance] = useState("15");
   const [overridePanels, setOverridePanels] = useState("");
   const [wallLaborHoursOverride, setWallLaborHoursOverride] = useState("");
   const [floorLaborHoursOverride, setFloorLaborHoursOverride] = useState("");
@@ -157,15 +195,12 @@ export default function EnvelopeEstimator() {
   const [oneTimeFee, setOneTimeFee] = useState(0);
   const [salesLeadFee, setSalesLeadFee] = useState(0);
   const [levels, setLevels] = useState({ 2: { joist: 16, decking: 20, crane: 100 }, 3: { joist: 16, decking: 20, crane: 100 }, 4: { joist: 16, decking: 20, crane: 100 } });
+  const [showAdminInput, setShowAdminInput] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminError, setAdminError] = useState(false);
 
   // Step 4 — Foundation & Sitework
-  const [foundationItems, setFoundationItems] = useState([
-    { name: "Footings", bidCost: "", units: "", unitPrice: "" },
-    { name: "Foundation Walls", bidCost: "", units: "", unitPrice: "" },
-    { name: "Slab", bidCost: "", units: "", unitPrice: "" },
-    { name: "Waste / Slab Overpour", bidCost: "", units: "", unitPrice: "" },
-    { name: "Excavation / Soil", bidCost: "", units: "", unitPrice: "" },
-  ]);
+  const [foundationData, setFoundationData] = useState({});
   const [joistPricing, setJoistPricing] = useState({ ...JOIST_PRICING });
   const [deckingPricing, setDeckingPricing] = useState({ ...DECKING_PRICING });
   const [cranePricing, setCranePricing] = useState({ ...CRANE_PRICING });
@@ -181,7 +216,7 @@ export default function EnvelopeEstimator() {
   // Panel calc
   const panelHeight = numStories >= 3 ? 10.5 : numStories === 2 ? 9.5 : 9;
   const panelWidth = 4;
-  const effectiveArea = panelHeight * panelWidth * (1 - parseNum(openingAllowance) / 100);
+  const effectiveArea = panelHeight * panelWidth * (1 - 15 / 100);
   const perimeter = avgSqft > 0 ? 4 * Math.sqrt(avgSqft) : 0;
   const wallArea = perimeter * panelHeight * numStories;
   const autoPanelCount = effectiveArea > 0 ? Math.ceil(wallArea / effectiveArea) : 0;
@@ -248,11 +283,9 @@ export default function EnvelopeEstimator() {
   }, [totalSqft, avgSqft, cc, lr, wallLaborHours, floorLaborHours, finalPanelCount, numStories, levels, joistPricing, deckingPricing, cranePricing, techFeePerSqft, oneTimeFee, salesLeadFee]);
 
   // Foundation calcs
-  const foundationSubtotal = foundationItems.reduce((sum, item) => {
-    const bid = parseNum(item.bidCost);
-    const units = parseNum(item.units);
-    const up = parseNum(item.unitPrice);
-    return sum + (bid > 0 ? bid : units * up);
+  const foundationSubtotal = FOUNDATION_ITEMS.reduce((sum, item) => {
+    const d = foundationData[item.id] || {};
+    return sum + calcLineItem(d.bid, d.units, d.price);
   }, 0);
   const foundationCostPerSqft = totalSqft > 0 ? foundationSubtotal / totalSqft : 0;
 
@@ -304,13 +337,10 @@ export default function EnvelopeEstimator() {
         totalEnvelope: calcs.totalEnvelope,
         costPerSqft,
         techFeePerSqft,
-        foundationItems: foundationItems.map(item => ({
-          name: item.name,
-          bidCost: parseNum(item.bidCost),
-          units: parseNum(item.units),
-          unitPrice: parseNum(item.unitPrice),
-          total: parseNum(item.bidCost) > 0 ? parseNum(item.bidCost) : parseNum(item.units) * parseNum(item.unitPrice),
-        })),
+        foundationItems: FOUNDATION_ITEMS.map(item => {
+          const d = foundationData[item.id] || {};
+          return { name: item.name, bidCost: parseNum(d.bid), units: parseNum(d.units), unitPrice: parseNum(d.price), total: calcLineItem(d.bid, d.units, d.price) };
+        }),
         foundationSubtotal,
         foundationCostPerSqft,
       };
@@ -382,14 +412,22 @@ export default function EnvelopeEstimator() {
     </div>
   );
 
+  const handleAdminUnlock = () => {
+    if (adminPassword === ADMIN_PASSWORD) {
+      setAdminMode(true);
+      setShowAdminInput(false);
+      setAdminError(false);
+      setAdminPassword("");
+    } else {
+      setAdminError(true);
+    }
+  };
+
   const renderStep3 = (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-gray-800">NileBuilt Setup</h2>
       <p className="text-sm text-gray-500">Panel configuration and technology fees.</p>
-      <div className="grid grid-cols-2 gap-3">
-        <NumberInput label="Opening Allowance (%)" value={openingAllowance} onChange={setOpeningAllowance} hint="Percentage of wall area for doors/windows" />
-        <NumberInput label="Override Panel Count" value={overridePanels} onChange={setOverridePanels} placeholder={`Auto: ${autoPanelCount}`} hint="Leave blank to use auto-calculated count" />
-      </div>
+      <NumberInput label="Override Panel Count" value={overridePanels} onChange={setOverridePanels} placeholder={`Auto: ${autoPanelCount}`} hint="Leave blank to use auto-calculated count" />
       <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: BRAND.primaryBg }}>
         <span className="font-semibold" style={{ color: BRAND.primaryDark }}>Panels: {finalPanelCount}</span>
         <span className="ml-4 text-gray-500">Panel size: {panelWidth}′ × {panelHeight}′</span>
@@ -402,9 +440,18 @@ export default function EnvelopeEstimator() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-700">NileBuilt Technology Fee</h3>
           {adminMode ? (
-            <button onClick={() => setAdminMode(false)} className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-amber-100 text-amber-700"><Unlock size={12} /> Admin</button>
+            <button onClick={() => setAdminMode(false)} className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-amber-100 text-amber-700"><Unlock size={12} /> Admin Mode</button>
+          ) : showAdminInput ? (
+            <div className="flex items-center gap-2">
+              <input type="password" className={`border rounded px-2 py-1 text-xs w-32 ${adminError ? "border-red-400" : "border-gray-300"}`}
+                placeholder="Enter password" value={adminPassword} onChange={(e) => { setAdminPassword(e.target.value); setAdminError(false); }}
+                onKeyDown={(e) => e.key === "Enter" && handleAdminUnlock()} autoFocus />
+              <button onClick={handleAdminUnlock} className="text-xs px-2 py-1 rounded bg-blue-500 text-white">Go</button>
+              <button onClick={() => { setShowAdminInput(false); setAdminPassword(""); setAdminError(false); }} className="text-xs text-gray-400">Cancel</button>
+              {adminError && <span className="text-xs text-red-500">Wrong password</span>}
+            </div>
           ) : (
-            <button onClick={() => setAdminMode(true)} className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-400"><Lock size={12} /> Locked</button>
+            <button onClick={() => setShowAdminInput(true)} className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-400"><Lock size={12} /> Locked</button>
           )}
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -435,54 +482,35 @@ export default function EnvelopeEstimator() {
     </div>
   );
 
-  // Foundation item handler
-  const updateFoundationItem = (index, field, value) => {
-    const updated = [...foundationItems];
-    updated[index] = { ...updated[index], [field]: value };
-    setFoundationItems(updated);
-  };
-  const addFoundationItem = () => {
-    setFoundationItems([...foundationItems, { name: "", bidCost: "", units: "", unitPrice: "" }]);
-  };
-  const removeFoundationItem = (index) => {
-    setFoundationItems(foundationItems.filter((_, i) => i !== index));
-  };
-
   const renderStep4 = (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold text-gray-800">Foundation & Sitework</h2>
-      <p className="text-sm text-gray-500">Enter bid costs or unit pricing for each foundation line item. You can add or remove rows as needed.</p>
-      <div className="space-y-3">
-        {foundationItems.map((item, i) => (
-          <div key={i} className="border rounded-lg p-3 bg-white">
-            <div className="flex items-center justify-between mb-2">
-              <TextInput label="Line Item" value={item.name} onChange={(v) => updateFoundationItem(i, "name", v)} placeholder="e.g. Footings" />
-              {foundationItems.length > 1 && (
-                <button onClick={() => removeFoundationItem(i)} className="ml-2 mt-5 text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
-              )}
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <CurrencyInput label="Bid Cost" value={item.bidCost} onChange={(v) => updateFoundationItem(i, "bidCost", v)} placeholder="0" hint="Total bid, OR use units × price" />
-              <NumberInput label="Number of Units" value={item.units} onChange={(v) => updateFoundationItem(i, "units", v)} placeholder="0" />
-              <CurrencyInput label="Unit Price" value={item.unitPrice} onChange={(v) => updateFoundationItem(i, "unitPrice", v)} placeholder="0" />
-            </div>
-            {(parseNum(item.bidCost) > 0 || (parseNum(item.units) > 0 && parseNum(item.unitPrice) > 0)) && (
-              <div className="mt-2 text-sm font-semibold text-right" style={{ color: BRAND.primaryDark }}>
-                Line Total: {fmt(parseNum(item.bidCost) > 0 ? parseNum(item.bidCost) : parseNum(item.units) * parseNum(item.unitPrice))}
-              </div>
-            )}
-          </div>
-        ))}
+    <div className="max-w-3xl mx-auto">
+      <h2 className="text-2xl font-bold text-gray-900 mb-1">Foundation & Sitework</h2>
+      <p className="text-gray-500 mb-4">Enter a bid cost OR units and unit price for each line item. Bid cost takes priority.</p>
+      <div className="hidden sm:grid grid-cols-12 gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wider pb-2 border-b border-gray-200 mb-1">
+        <div className="col-span-3">Line Item</div>
+        <div className="col-span-3">Bid Cost</div>
+        <div className="col-span-2"># Units</div>
+        <div className="col-span-2">Unit Price</div>
+        <div className="col-span-2 text-right">Cost</div>
       </div>
-      <button onClick={addFoundationItem} className="flex items-center gap-1 text-sm font-semibold px-3 py-2 rounded-lg border border-dashed" style={{ color: BRAND.primary, borderColor: BRAND.primary }}>
-        <Plus size={16} /> Add Line Item
-      </button>
-      {foundationSubtotal > 0 && (
-        <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: BRAND.primaryBg }}>
-          <span className="font-semibold" style={{ color: BRAND.primaryDark }}>Foundation Subtotal: {fmt(foundationSubtotal)}</span>
-          {totalSqft > 0 && <span className="ml-4 text-gray-500">{fmtDec(foundationCostPerSqft)}/sqft</span>}
+      {FOUNDATION_ITEMS.map((item) => (
+        <LineItemRow
+          key={item.id}
+          item={item.name}
+          data={foundationData[item.id] || {}}
+          onChange={(d) => setFoundationData({ ...foundationData, [item.id]: d })}
+          totalSqft={totalSqft}
+        />
+      ))}
+      <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: BRAND.primaryBg }}>
+        <div className="flex justify-between items-center">
+          <span className="font-bold" style={{ color: BRAND.primaryDark }}>Foundation Subtotal</span>
+          <div className="text-right">
+            <span className="text-lg font-bold" style={{ color: BRAND.primaryDark }}>{fmt(foundationSubtotal)}</span>
+            {totalSqft > 0 && <div className="text-xs text-gray-500">{fmtDec(foundationCostPerSqft)}/sqft</div>}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 
@@ -549,12 +577,10 @@ export default function EnvelopeEstimator() {
       {foundationSubtotal > 0 && (
         <div className="border rounded-lg p-4">
           <h3 className="font-bold text-sm text-gray-600 uppercase mb-2">Foundation & Sitework</h3>
-          {foundationItems.filter(item => {
-            const total = parseNum(item.bidCost) > 0 ? parseNum(item.bidCost) : parseNum(item.units) * parseNum(item.unitPrice);
-            return total > 0;
-          }).map((item, i) => {
-            const total = parseNum(item.bidCost) > 0 ? parseNum(item.bidCost) : parseNum(item.units) * parseNum(item.unitPrice);
-            return <DisplayField key={i} label={item.name || `Item ${i + 1}`} value={fmt(total)} />;
+          {FOUNDATION_ITEMS.map((item) => {
+            const d = foundationData[item.id] || {};
+            const total = calcLineItem(d.bid, d.units, d.price);
+            return total > 0 ? <DisplayField key={item.id} label={item.name} value={fmt(total)} /> : null;
           })}
           <div className="flex justify-between items-baseline py-2 border-t-2 font-bold" style={{ borderColor: BRAND.primary }}>
             <span className="text-sm">Foundation Subtotal</span>
