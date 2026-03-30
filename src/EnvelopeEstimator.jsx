@@ -175,10 +175,10 @@ export default function EnvelopeEstimator() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [showValidation, setShowValidation] = useState(false);
-  const [adminMode, setAdminMode] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("admin") === ADMIN_PASSWORD;
-  });
+  // Tech fee values can be set via URL params: ?tf=30&otf=5&slf=3
+  // NileBuilt employees build the link, builders just use it
+  const [urlParams] = useState(() => new URLSearchParams(window.location.search));
+  const [adminMode, setAdminMode] = useState(() => urlParams.get("admin") === ADMIN_PASSWORD);
 
   // Step 1 — Project Info
   const [projectName, setProjectName] = useState("");
@@ -205,13 +205,16 @@ export default function EnvelopeEstimator() {
   const [overridePanels, setOverridePanels] = useState("");
   const [wallLaborHoursOverride, setWallLaborHoursOverride] = useState("");
   const [floorLaborHoursOverride, setFloorLaborHoursOverride] = useState("");
-  const [techFeePerSqft, setTechFeePerSqft] = useState(30);
-  const [oneTimeFee, setOneTimeFee] = useState(0);
-  const [salesLeadFee, setSalesLeadFee] = useState(0);
+  const [techFeePerSqft, setTechFeePerSqft] = useState(() => {
+    const v = parseFloat(urlParams.get("tf")); return isNaN(v) ? 30 : v;
+  });
+  const [oneTimeFee, setOneTimeFee] = useState(() => {
+    const v = parseFloat(urlParams.get("otf")); return isNaN(v) ? 0 : v;
+  });
+  const [salesLeadFee, setSalesLeadFee] = useState(() => {
+    const v = parseFloat(urlParams.get("slf")); return isNaN(v) ? 0 : v;
+  });
   const [levels, setLevels] = useState({ 2: { joist: 16, decking: 20, crane: 100 }, 3: { joist: 16, decking: 20, crane: 100 }, 4: { joist: 16, decking: 20, crane: 100 } });
-  const [showAdminInput, setShowAdminInput] = useState(false);
-  const [adminPassword, setAdminPassword] = useState("");
-  const [adminError, setAdminError] = useState(false);
 
   // Step 4 — Foundation & Sitework
   const [foundationData, setFoundationData] = useState({});
@@ -317,7 +320,8 @@ export default function EnvelopeEstimator() {
   ];
 
   // Validation
-  const step1Valid = projectName && street && firstName && lastName && builderEmail;
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const step1Valid = projectName && street && firstName && lastName && builderEmail && isValidEmail(builderEmail);
   const step2Valid = stories && sqft1;
 
   const goNext = () => {
@@ -393,11 +397,11 @@ export default function EnvelopeEstimator() {
         <TextInput label={<RequiredLabel>Last Name</RequiredLabel>} value={lastName} onChange={setLastName} placeholder="Last name" error={showValidation && !lastName} />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <TextInput label={<RequiredLabel>Builder Email</RequiredLabel>} value={builderEmail} onChange={setBuilderEmail} placeholder="you@example.com" error={showValidation && !builderEmail} />
+        <TextInput label={<RequiredLabel>Builder Email</RequiredLabel>} value={builderEmail} onChange={setBuilderEmail} placeholder="you@example.com" error={showValidation && (!builderEmail || !isValidEmail(builderEmail))} />
         <TextInput label="Builder Phone" value={builderPhone} onChange={setBuilderPhone} placeholder="(555) 123-4567" />
       </div>
       <CurrencyInput label="Builder Sales Price" value={salesPrice} onChange={setSalesPrice} placeholder="0" hint="The total price you plan to sell this home for. You can add this later." />
-      {showValidation && !step1Valid && <p className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> Please fill in all required fields.</p>}
+      {showValidation && !step1Valid && <p className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> {builderEmail && !isValidEmail(builderEmail) ? "Please enter a valid email address." : "Please fill in all required fields."}</p>}
     </div>
   );
 
