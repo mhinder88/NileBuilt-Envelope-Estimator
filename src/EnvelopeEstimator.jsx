@@ -116,6 +116,22 @@ function TextInput({ value, onChange, placeholder, label, error }) {
   );
 }
 
+function PhoneInput({ value, onChange, placeholder, label, error }) {
+  const formatPhone = (raw) => {
+    const digits = raw.replace(/\D/g, "").slice(0, 10);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  };
+  return (
+    <div>
+      {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+      <input type="tel" className={`w-full border rounded-lg px-3 py-2 text-sm bg-white transition ${error ? "border-red-400 ring-1 ring-red-300" : "border-gray-300 focus:border-blue-400"}`}
+        placeholder={placeholder || "(555) 123-4567"} value={formatPhone(value)} onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 10))} />
+    </div>
+  );
+}
+
 function RequiredLabel({ children }) {
   return <span>{children} <span className="text-red-500">*</span></span>;
 }
@@ -349,7 +365,7 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
 
   // Validation
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const step1Valid = projectName && street && firstName && lastName && builderEmail && isValidEmail(builderEmail);
+  const step1Valid = projectName && street && city && state && firstName && lastName && builderEmail && isValidEmail(builderEmail);
   const step2Valid = stories && sqft1;
 
   const goNext = () => {
@@ -416,6 +432,24 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
             total_cost: calcs.totalEnvelope,
             cost_per_sqft: costPerSqft,
             app_source: "envelope",
+            estimate_data: {
+              builderPhone, salesPrice: sp,
+              concreteCost: cc, laborRate: lr,
+              wallMaterials: calcs.wallMaterials,
+              wallLabor: calcs.wallLabor,
+              floorDeck: calcs.floorDeck,
+              roof: calcs.roof,
+              structureSubtotal: calcs.structureSubtotal,
+              totalTechFees: calcs.totalTechFees,
+              totalEnvelope: calcs.totalEnvelope,
+              costPerSqft,
+              foundationItems: FOUNDATION_ITEMS.map(item => {
+                const d = foundationData[item.id] || {};
+                return { name: item.name, total: calcLineItem(d.bid, d.units, d.price) };
+              }),
+              foundationSubtotal,
+              totalSqft,
+            },
           });
         } catch (sbErr) {
           console.error("Supabase save error (non-blocking):", sbErr);
@@ -438,8 +472,8 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
       <TextInput label={<RequiredLabel>Project Name</RequiredLabel>} value={projectName} onChange={setProjectName} placeholder="e.g. Sunset Residence" error={showValidation && !projectName} />
       <TextInput label={<RequiredLabel>Street Address</RequiredLabel>} value={street} onChange={setStreet} placeholder="123 Main St" error={showValidation && !street} />
       <div className="grid grid-cols-3 gap-3">
-        <TextInput label="City" value={city} onChange={setCity} placeholder="City" />
-        <SelectInput label="State" value={state} onChange={setState} options={US_STATES} placeholder="Select..." />
+        <TextInput label={<RequiredLabel>City</RequiredLabel>} value={city} onChange={setCity} placeholder="City" error={showValidation && !city} />
+        <SelectInput label={<RequiredLabel>State</RequiredLabel>} value={state} onChange={setState} options={US_STATES} placeholder="Select..." error={showValidation && !state} />
         <TextInput label="County" value={county} onChange={setCounty} placeholder="County" />
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -448,7 +482,7 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
       </div>
       <div className="grid grid-cols-2 gap-3">
         <TextInput label={<RequiredLabel>Builder Email</RequiredLabel>} value={builderEmail} onChange={setBuilderEmail} placeholder="you@example.com" error={showValidation && (!builderEmail || !isValidEmail(builderEmail))} />
-        <TextInput label="Builder Phone" value={builderPhone} onChange={setBuilderPhone} placeholder="(555) 123-4567" />
+        <PhoneInput label="Builder Phone" value={builderPhone} onChange={setBuilderPhone} />
       </div>
       <CurrencyInput label="Builder Sales Price" value={salesPrice} onChange={setSalesPrice} placeholder="0" hint="The total price you plan to sell this home for. You can add this later." />
       {showValidation && !step1Valid && <p className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> {builderEmail && !isValidEmail(builderEmail) ? "Please enter a valid email address." : "Please fill in all required fields."}</p>}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
+import { LOGO_SRC } from "./logo";
 
 // ─── BRAND ───────────────────────────────────────────────────────────────────
 const BRAND = {
@@ -17,9 +18,134 @@ const fmt = (n) =>
     maximumFractionDigits: 0,
   }).format(n || 0);
 
+const fmtDec = (n) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n || 0);
+
+function NileBuiltLogo({ size = 64 }) {
+  return (
+    <div style={{ background: "white", borderRadius: 12, padding: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }}>
+      <img src={LOGO_SRC} alt="NileBuilt" style={{ height: size, width: "auto", display: "block" }} />
+    </div>
+  );
+}
+
+// ─── ESTIMATE DETAIL VIEW ────────────────────────────────────────────────────
+function EstimateDetail({ estimate, onBack }) {
+  const d = estimate.estimate_data || {};
+  const totalSqft = d.totalSqft || estimate.total_sqft || 0;
+  const costPerSqft = d.costPerSqft || estimate.cost_per_sqft || 0;
+  const isProforma = estimate.app_source === "proforma";
+
+  const SummaryRow = ({ label, value, bold }) => (
+    <div className={`flex justify-between py-2 border-b border-gray-100 ${bold ? "font-bold" : ""}`}>
+      <span className="text-sm text-gray-600">{label}</span>
+      <span className={`text-sm ${bold ? "font-bold text-gray-900" : "font-semibold text-gray-800"}`}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header
+        className="text-white px-6 py-4 flex items-center justify-between"
+        style={{ background: `linear-gradient(135deg, ${BRAND.primaryDark} 0%, ${BRAND.primary} 100%)` }}
+      >
+        <NileBuiltLogo size={48} />
+        <div className="text-right">
+          <div className="text-sm opacity-75">Estimate Summary</div>
+          <div className="text-xl font-bold">{fmt(estimate.total_cost)}</div>
+        </div>
+      </header>
+
+      <main className="max-w-2xl mx-auto px-4 py-6">
+        <button onClick={onBack} className="flex items-center gap-1 text-sm font-semibold mb-4" style={{ color: BRAND.primary }}>
+          ← Back to My Estimates
+        </button>
+
+        {/* Project Info */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+          <h3 className="font-bold text-gray-800 mb-3">Project Information</h3>
+          <SummaryRow label="Project Name" value={estimate.project_title} />
+          <SummaryRow label="Address" value={`${estimate.street_address || ""} ${estimate.city ? ", " + estimate.city : ""} ${estimate.state || ""}`} />
+          <SummaryRow label="Builder" value={`${estimate.builder_first_name || ""} ${estimate.builder_last_name || ""}`.trim() || estimate.builder_email} />
+          <SummaryRow label="Email" value={estimate.builder_email} />
+          {d.builderPhone && <SummaryRow label="Phone" value={d.builderPhone} />}
+          {d.salesPrice > 0 && <SummaryRow label="Sales Price" value={fmt(d.salesPrice)} />}
+        </div>
+
+        {/* Structure */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+          <h3 className="font-bold text-gray-800 mb-3">Structure</h3>
+          <SummaryRow label="Stories" value={estimate.stories} />
+          <SummaryRow label="Total Square Footage" value={`${Number(totalSqft).toLocaleString()} sqft`} />
+          {d.concreteCost && <SummaryRow label="Concrete Cost/Yard" value={fmt(d.concreteCost)} />}
+          {d.laborRate && <SummaryRow label="Labor Rate/Hour" value={fmt(d.laborRate)} />}
+        </div>
+
+        {/* Envelope Costs */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+          <h3 className="font-bold text-gray-800 mb-3">Envelope Costs</h3>
+          {d.wallMaterials != null && <SummaryRow label="Wall Materials" value={fmt(d.wallMaterials)} />}
+          {d.wallLabor != null && <SummaryRow label="Wall Labor" value={fmt(d.wallLabor)} />}
+          {d.floorDeck != null && <SummaryRow label="Floor / Deck" value={fmt(d.floorDeck)} />}
+          {d.roof != null && <SummaryRow label="Roof" value={fmt(d.roof)} />}
+          {d.structureSubtotal != null && <SummaryRow label="Structure Subtotal" value={fmt(d.structureSubtotal)} bold />}
+          {d.totalTechFees != null && <SummaryRow label="NileBuilt Technology Fees" value={fmt(d.totalTechFees)} />}
+          {d.totalEnvelope != null && <SummaryRow label="Total Envelope" value={fmt(d.totalEnvelope)} bold />}
+        </div>
+
+        {/* Foundation */}
+        {d.foundationSubtotal > 0 && (
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+            <h3 className="font-bold text-gray-800 mb-3">Foundation & Sitework</h3>
+            {(d.foundationItems || []).filter(i => i.total > 0).map((item, idx) => (
+              <SummaryRow key={idx} label={item.name} value={fmt(item.total)} />
+            ))}
+            <SummaryRow label="Foundation Subtotal" value={fmt(d.foundationSubtotal)} bold />
+          </div>
+        )}
+
+        {/* Budget (Proforma only) */}
+        {isProforma && d.budgetGrandTotal > 0 && (
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+            <h3 className="font-bold text-gray-800 mb-3">Budget Detail</h3>
+            {(d.budgetCategories || []).filter(c => c.subtotal > 0).map((cat, idx) => (
+              <SummaryRow key={idx} label={cat.label} value={fmt(cat.subtotal)} />
+            ))}
+            <SummaryRow label="Budget Grand Total" value={fmt(d.budgetGrandTotal)} bold />
+          </div>
+        )}
+
+        {/* Grand Total */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4" style={{ backgroundColor: BRAND.primaryBg }}>
+          <div className="flex justify-between items-center">
+            <span className="text-lg font-bold" style={{ color: BRAND.primaryDark }}>Total Project Cost</span>
+            <span className="text-xl font-bold" style={{ color: BRAND.primaryDark }}>{fmt(estimate.total_cost)}</span>
+          </div>
+          {costPerSqft > 0 && (
+            <div className="text-right text-sm text-gray-500 mt-1">{fmtDec(costPerSqft)}/sqft</div>
+          )}
+        </div>
+
+        <div className="text-center text-xs text-gray-400 mt-4">
+          Submitted {new Date(estimate.created_at).toLocaleDateString("en-US", {
+            month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+          })}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ─── MAIN DASHBOARD ──────────────────────────────────────────────────────────
 export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, appSource }) {
   const [estimates, setEstimates] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedEstimate, setSelectedEstimate] = useState(null);
 
   useEffect(() => {
     fetchEstimates();
@@ -34,7 +160,6 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
-      // Optionally filter by app source
       if (appSource) {
         query = query.eq("app_source", appSource);
       }
@@ -49,6 +174,10 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
     }
   };
 
+  if (selectedEstimate) {
+    return <EstimateDetail estimate={selectedEstimate} onBack={() => setSelectedEstimate(null)} />;
+  }
+
   const userName =
     user.user_metadata?.first_name
       ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ""}`.trim()
@@ -56,7 +185,6 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header
         className="text-white px-6 py-4 flex items-center justify-between"
         style={{ background: `linear-gradient(135deg, ${BRAND.primaryDark} 0%, ${BRAND.primary} 100%)` }}
@@ -74,7 +202,6 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-8">
-        {/* New Estimate Button */}
         <button
           onClick={onNewEstimate}
           className="w-full py-4 rounded-xl font-semibold text-white text-lg transition hover:opacity-90 mb-8 shadow-lg"
@@ -83,7 +210,6 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
           + New Estimate
         </button>
 
-        {/* Past Estimates */}
         <h2 className="text-lg font-bold text-gray-800 mb-4">Past Estimates</h2>
 
         {loading ? (
@@ -98,7 +224,8 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
             {estimates.map((est) => (
               <div
                 key={est.id}
-                className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition"
+                onClick={() => setSelectedEstimate(est)}
+                className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition cursor-pointer"
               >
                 <div className="flex justify-between items-start">
                   <div>
@@ -120,19 +247,18 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
                     )}
                   </div>
                 </div>
-                <div className="text-xs text-gray-300 mt-2 border-t border-gray-50 pt-2">
-                  {new Date(est.created_at).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                  {est.app_source && (
-                    <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">
-                      {est.app_source === "envelope" ? "Envelope" : "Full Proforma"}
-                    </span>
-                  )}
+                <div className="flex justify-between items-center text-xs text-gray-300 mt-2 border-t border-gray-50 pt-2">
+                  <span>
+                    {new Date(est.created_at).toLocaleDateString("en-US", {
+                      month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+                    })}
+                    {est.app_source && (
+                      <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">
+                        {est.app_source === "envelope" ? "Envelope" : "Full Proforma"}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-xs font-medium" style={{ color: BRAND.primary }}>View →</span>
                 </div>
               </div>
             ))}

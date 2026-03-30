@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
+import { LOGO_SRC } from "./logo";
 
 // ─── BRAND (must match main app) ─────────────────────────────────────────────
 const BRAND = {
@@ -10,15 +11,12 @@ const BRAND = {
   accent: "#7C8FD4",
 };
 
-// ─── NileBuilt Logo SVG ─────────────────────────────────────────────────────
+// ─── NileBuilt Logo ─────────────────────────────────────────────────────────
 function NileBuiltLogo({ size = 64 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 120 120" fill="none">
-      <rect width="120" height="120" rx="24" fill="white" fillOpacity="0.15" />
-      <path d="M30 85V35l30 50V35" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M70 85V35l20 25 20-25v50" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="25" y="90" width="70" height="4" rx="2" fill="white" fillOpacity="0.5" />
-    </svg>
+    <div style={{ background: "white", borderRadius: 12, padding: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }}>
+      <img src={LOGO_SRC} alt="NileBuilt" style={{ height: size, width: "auto", display: "block" }} />
+    </div>
   );
 }
 
