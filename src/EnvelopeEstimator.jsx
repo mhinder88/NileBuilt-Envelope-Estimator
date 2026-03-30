@@ -51,6 +51,9 @@ const FOUNDATION_ITEMS = [
 const ADMIN_PASSWORD = "nilebuilt2024";
 const BUILDER_PASSWORD = "nilebuilt";
 
+// Supabase client for saving estimates
+import { supabase } from "./supabaseClient";
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const fmt = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
 const fmtDec = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
@@ -170,21 +173,7 @@ function ProgressBar({ steps, current }) {
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
-export default function EnvelopeEstimator() {
-  const [authenticated, setAuthenticated] = useState(false);
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError] = useState(false);
-
-  const handleLogin = () => {
-    if (loginPassword === BUILDER_PASSWORD || loginPassword === ADMIN_PASSWORD) {
-      setAuthenticated(true);
-      if (loginPassword === ADMIN_PASSWORD) setAdminMode(true);
-      setLoginError(false);
-    } else {
-      setLoginError(true);
-    }
-  };
-
+export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDashboard }) {
   const [step, setStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -200,9 +189,9 @@ export default function EnvelopeEstimator() {
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [county, setCounty] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [builderEmail, setBuilderEmail] = useState("");
+  const [firstName, setFirstName] = useState(user?.user_metadata?.first_name || "");
+  const [lastName, setLastName] = useState(user?.user_metadata?.last_name || "");
+  const [builderEmail, setBuilderEmail] = useState(user?.email || "");
   const [builderPhone, setBuilderPhone] = useState("");
   const [salesPrice, setSalesPrice] = useState("");
 
@@ -409,6 +398,28 @@ export default function EnvelopeEstimator() {
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || "Submission failed.");
+      }
+      // Save summary to Supabase for past estimates dashboard
+      if (user) {
+        try {
+          await supabase.from("estimates").insert({
+            user_id: user.id,
+            builder_email: builderEmail || user.email,
+            builder_first_name: firstName,
+            builder_last_name: lastName,
+            project_title: projectName,
+            street_address: street,
+            city,
+            state,
+            stories: numStories,
+            total_sqft: totalSqft,
+            total_cost: calcs.totalEnvelope,
+            cost_per_sqft: costPerSqft,
+            app_source: "envelope",
+          });
+        } catch (sbErr) {
+          console.error("Supabase save error (non-blocking):", sbErr);
+        }
       }
       setSubmitted(true);
     } catch (err) {
@@ -684,6 +695,7 @@ export default function EnvelopeEstimator() {
       <div className="flex gap-3 justify-center">
         <button onClick={() => { setSubmitted(false); setStep(0); }} className="px-5 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: BRAND.primary, color: BRAND.primary }}>New Estimate</button>
         <button onClick={() => { setSubmitted(false); setStep(4); }} className="px-5 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: BRAND.primary }}>Review Summary</button>
+        {onBackToDashboard && <button onClick={onBackToDashboard} className="px-5 py-2 rounded-lg border text-sm font-semibold border-gray-300 text-gray-600">My Estimates</button>}
       </div>
     </div>
   );
@@ -697,36 +709,6 @@ export default function EnvelopeEstimator() {
           <NileBuiltLogo size={64} />
         </header>
         <main className="flex-1 px-4 py-8">{renderSubmitted()}</main>
-      </div>
-    );
-  }
-
-  // ─── PASSWORD GATE ──────────────────────────────────────────────────────────
-  if (!authenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${BRAND.primaryDark} 0%, ${BRAND.accent} 100%)` }}>
-        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm text-center">
-          <div className="mb-6"><NileBuiltLogo size={80} /></div>
-          <h1 className="text-xl font-bold text-gray-800 mb-2">Envelope Estimator</h1>
-          <p className="text-sm text-gray-500 mb-6">Enter your access code to continue.</p>
-          <input
-            type="password"
-            className={`w-full border rounded-lg px-4 py-3 text-sm mb-3 outline-none transition ${loginError ? "border-red-400 ring-1 ring-red-300" : "border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200"}`}
-            placeholder="Access code"
-            value={loginPassword}
-            onChange={(e) => { setLoginPassword(e.target.value); setLoginError(false); }}
-            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-            autoFocus
-          />
-          {loginError && <p className="text-red-500 text-sm mb-3">Invalid access code.</p>}
-          <button
-            onClick={handleLogin}
-            className="w-full py-3 rounded-lg font-semibold text-white transition"
-            style={{ backgroundColor: BRAND.primary }}
-          >
-            Enter
-          </button>
-        </div>
       </div>
     );
   }

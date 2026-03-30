@@ -1,10 +1,46 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
+import AuthGate from './AuthGate';
+import EstimatesDashboard from './EstimatesDashboard';
 import EnvelopeEstimator from './EnvelopeEstimator';
 import './index.css';
 
+function App() {
+  return (
+    <AuthGate appTitle="Envelope Estimator">
+      {({ session, user, signOut }) => (
+        <AppRouter session={session} user={user} signOut={signOut} />
+      )}
+    </AuthGate>
+  );
+}
+
+function AppRouter({ session, user, signOut }) {
+  const [view, setView] = useState("dashboard"); // dashboard | estimator
+
+  if (view === "estimator") {
+    return (
+      <EnvelopeEstimator
+        user={user}
+        session={session}
+        onSignOut={signOut}
+        onBackToDashboard={() => setView("dashboard")}
+      />
+    );
+  }
+
+  return (
+    <EstimatesDashboard
+      user={user}
+      onNewEstimate={() => setView("estimator")}
+      onSignOut={signOut}
+      appSource="envelope"
+    />
+  );
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <EnvelopeEstimator />
+    <App />
   </React.StrictMode>
 );
