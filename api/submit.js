@@ -67,8 +67,26 @@ export default async function handler(req, res) {
       const url = `https://creator.zoho.com/api/v2.1/${owner}/${app}/form/${form}`;
 
       const totalSqft = p.totalSqft || 0;
-      const avgSqft = totalSqft > 0 && p.stories > 0 ? Math.round(totalSqft / p.stories) : 0;
+      const avgSqft = p.avgSqft || (totalSqft > 0 && p.stories > 0 ? Math.round(totalSqft / p.stories) : 0);
       const costPerSqft = totalSqft > 0 ? Math.round((p.totalEnvelope || 0) / totalSqft * 100) / 100 : 0;
+
+      // Build foundation subform rows
+      const foundationRows = (p.foundationItems || [])
+        .filter(item => item.total > 0)
+        .map(item => ({
+          Line_Item: item.name || "",
+          Bid_Cost: item.bidCost || 0,
+          Number_of_Units: item.units || 0,
+          Unit_Price: item.unitPrice || 0,
+        }));
+
+      // Map individual foundation costs from line items
+      const fi = p.foundationItems || [];
+      const footingsCost = fi[0]?.total || 0;
+      const foundationCost = fi[1]?.total || 0;
+      const slabCost = fi[2]?.total || 0;
+      const wasteSlabCost = fi[3]?.total || 0;
+      const excavationCost = fi[4]?.total || 0;
 
       const creatorData = {
         data: {
@@ -80,8 +98,8 @@ export default async function handler(req, res) {
           County: p.county || "",
 
           // Builder info
-          First_Name: p.Builder_First_Name || "",
-          Last_Name: p.Builder_Last_Name || "",
+          First_Name: p.firstName || "",
+          Last_Name: p.lastName || "",
           Builder_Email: p.builderEmail || "",
           Builder_Phone: p.builderPhone || "",
 
@@ -90,6 +108,7 @@ export default async function handler(req, res) {
           Story_1_Square_Footage: p.sqft1 || 0,
           Story_2_Square_Footage: p.sqft2 || 0,
           Story_3_Square_Footage: p.sqft3 || 0,
+          Story_4_Square_Footage: p.sqft4 || 0,
           Total_Square_Footage: totalSqft,
           Avg_Sqft_per_Story: avgSqft,
 
@@ -97,6 +116,16 @@ export default async function handler(req, res) {
           Builder_Sales_Price: p.salesPrice || 0,
           Concrete_Cost_per_Yard: p.concreteCost || 200,
           General_Labor_Cost_per_Hour: p.laborRate || 75,
+
+          // Foundation & Sitework
+          Foundation_Sitework1: foundationRows.length > 0 ? foundationRows : undefined,
+          Footings_Cost: footingsCost,
+          Foundation_Cost: foundationCost,
+          Slab_Cost: slabCost,
+          Waste_Slab_Cost: wasteSlabCost,
+          Excavation_Soil_Cost: excavationCost,
+          Foundation_Subtotal: p.foundationSubtotal || 0,
+          Foundation_Cost_per_Sqft: p.foundationCostPerSqft || 0,
 
           // Envelope breakdown
           Wall_System_Cost: p.wallMaterials || 0,
@@ -107,16 +136,21 @@ export default async function handler(req, res) {
           Cost_Per_Square_Foot: costPerSqft,
 
           // Formatted display fields
-          Fmt_Wall_System: fmt(p.wallMaterials),
-          Fmt_Wall_Labor: fmt(p.wallLabor),
-          Fmt_Floor_Deck: fmt(p.floorDeck),
-          Fmt_Roof: fmt(p.roof),
-          Fmt_Structure_Subtotal: fmt(p.structureSubtotal),
-          Fmt_Tech_Fee: fmt(p.totalTechFees),
-          Fmt_Total_Envelope: fmt(p.totalEnvelope),
-          Fmt_Cost_Per_Sqft: fmt(costPerSqft),
+          Fmt_Wall_System_Cost: fmt(p.wallMaterials),
+          Fmt_Floor_Deck_Cost: fmt(p.floorDeck),
+          Fmt_Roof_Cost: fmt(p.roof),
+          Fmt_NileBuilt_Technology_Fee: fmt(p.totalTechFees),
+          Fmt_Total_Envelope_Cost: fmt(p.totalEnvelope),
+          Fmt_Cost_Per_Square_Foot: fmt(costPerSqft),
+          Fmt_Foundation_Subtotal: fmt(p.foundationSubtotal),
+          Fmt_Total_Square_Footage: totalSqft.toLocaleString(),
         },
       };
+
+      // Remove undefined fields
+      Object.keys(creatorData.data).forEach(key => {
+        if (creatorData.data[key] === undefined) delete creatorData.data[key];
+      });
 
       const creatorRes = await fetch(url, {
         method: "POST",

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { CheckCircle, ArrowLeft, ArrowRight, Building2, Settings2, BarChart3, ClipboardList, Lock, Unlock, Send, AlertCircle } from "lucide-react";
+import { CheckCircle, ArrowLeft, ArrowRight, Building2, Settings2, BarChart3, ClipboardList, Lock, Unlock, Send, AlertCircle, Landmark, Trash2, Plus } from "lucide-react";
 
 // ─── BRAND ────────────────────────────────────────────────────────────────────
 const BRAND = {
@@ -133,7 +133,8 @@ export default function EnvelopeEstimator() {
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [county, setCounty] = useState("");
-  const [builderName, setBuilderName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [builderEmail, setBuilderEmail] = useState("");
   const [builderPhone, setBuilderPhone] = useState("");
   const [salesPrice, setSalesPrice] = useState("");
@@ -143,6 +144,7 @@ export default function EnvelopeEstimator() {
   const [sqft1, setSqft1] = useState("");
   const [sqft2, setSqft2] = useState("");
   const [sqft3, setSqft3] = useState("");
+  const [sqft4, setSqft4] = useState("");
   const [concreteCost, setConcreteCost] = useState("200");
   const [laborRate, setLaborRate] = useState("40");
 
@@ -154,14 +156,23 @@ export default function EnvelopeEstimator() {
   const [techFeePerSqft, setTechFeePerSqft] = useState(30);
   const [oneTimeFee, setOneTimeFee] = useState(0);
   const [salesLeadFee, setSalesLeadFee] = useState(0);
-  const [levels, setLevels] = useState({ 2: { joist: 16, decking: 20, crane: 100 }, 3: { joist: 16, decking: 20, crane: 100 } });
+  const [levels, setLevels] = useState({ 2: { joist: 16, decking: 20, crane: 100 }, 3: { joist: 16, decking: 20, crane: 100 }, 4: { joist: 16, decking: 20, crane: 100 } });
+
+  // Step 4 — Foundation & Sitework
+  const [foundationItems, setFoundationItems] = useState([
+    { name: "Footings", bidCost: "", units: "", unitPrice: "" },
+    { name: "Foundation Walls", bidCost: "", units: "", unitPrice: "" },
+    { name: "Slab", bidCost: "", units: "", unitPrice: "" },
+    { name: "Waste / Slab Overpour", bidCost: "", units: "", unitPrice: "" },
+    { name: "Excavation / Soil", bidCost: "", units: "", unitPrice: "" },
+  ]);
   const [joistPricing, setJoistPricing] = useState({ ...JOIST_PRICING });
   const [deckingPricing, setDeckingPricing] = useState({ ...DECKING_PRICING });
   const [cranePricing, setCranePricing] = useState({ ...CRANE_PRICING });
 
   // Derived
   const numStories = parseInt(stories) || 0;
-  const totalSqft = parseNum(sqft1) + (numStories >= 2 ? parseNum(sqft2) : 0) + (numStories >= 3 ? parseNum(sqft3) : 0);
+  const totalSqft = parseNum(sqft1) + (numStories >= 2 ? parseNum(sqft2) : 0) + (numStories >= 3 ? parseNum(sqft3) : 0) + (numStories >= 4 ? parseNum(sqft4) : 0);
   const avgSqft = numStories > 0 ? totalSqft / numStories : 0;
   const cc = parseNum(concreteCost);
   const lr = parseNum(laborRate);
@@ -207,7 +218,7 @@ export default function EnvelopeEstimator() {
     if (numStories > 1) {
       for (let lvl = 2; lvl <= numStories; lvl++) {
         const cfg = levels[lvl] || { joist: 16, decking: 20, crane: 100 };
-        const floorSqft = lvl === 2 ? parseNum(sqft2) : parseNum(sqft3);
+        const floorSqft = lvl === 2 ? parseNum(sqft2) : lvl === 3 ? parseNum(sqft3) : parseNum(sqft4);
         const joistCost = floorSqft * (joistPricing[cfg.joist] || 7);
         const deckCost = floorSqft * (deckingPricing[cfg.decking] || 4.5);
         const craneCost = cranePricing[cfg.crane] || 3500;
@@ -236,6 +247,15 @@ export default function EnvelopeEstimator() {
     return { wallMaterials, wallLabor, floorDeck, roof, structureSubtotal, techFee, oneTime, salesLead, totalTechFees, totalEnvelope };
   }, [totalSqft, avgSqft, cc, lr, wallLaborHours, floorLaborHours, finalPanelCount, numStories, levels, joistPricing, deckingPricing, cranePricing, techFeePerSqft, oneTimeFee, salesLeadFee]);
 
+  // Foundation calcs
+  const foundationSubtotal = foundationItems.reduce((sum, item) => {
+    const bid = parseNum(item.bidCost);
+    const units = parseNum(item.units);
+    const up = parseNum(item.unitPrice);
+    return sum + (bid > 0 ? bid : units * up);
+  }, 0);
+  const foundationCostPerSqft = totalSqft > 0 ? foundationSubtotal / totalSqft : 0;
+
   const costPerSqft = totalSqft > 0 ? calcs.totalEnvelope / totalSqft : 0;
   const profit = sp - calcs.totalEnvelope;
   const profitMargin = sp > 0 ? profit / sp : 0;
@@ -245,11 +265,12 @@ export default function EnvelopeEstimator() {
     { label: "Project Info", icon: <ClipboardList size={18} /> },
     { label: "Structure", icon: <Building2 size={18} /> },
     { label: "NileBuilt Setup", icon: <Settings2 size={18} /> },
+    { label: "Foundation", icon: <Landmark size={18} /> },
     { label: "Cost Summary", icon: <BarChart3 size={18} /> },
   ];
 
   // Validation
-  const step1Valid = projectName && builderName && builderEmail && builderPhone;
+  const step1Valid = projectName && street && firstName && lastName && builderEmail;
   const step2Valid = stories && sqft1;
 
   const goNext = () => {
@@ -264,17 +285,15 @@ export default function EnvelopeEstimator() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const nameParts = builderName.trim().split(" ");
       const payload = {
         Project_Title: projectName,
         street, city, state, county,
-        Builder_First_Name: nameParts[0] || "",
-        Builder_Last_Name: nameParts.slice(1).join(" ") || "",
+        firstName, lastName,
         builderEmail, builderPhone,
         salesPrice: sp,
         stories,
-        sqft1: parseNum(sqft1), sqft2: parseNum(sqft2), sqft3: parseNum(sqft3),
-        totalSqft,
+        sqft1: parseNum(sqft1), sqft2: parseNum(sqft2), sqft3: parseNum(sqft3), sqft4: parseNum(sqft4),
+        totalSqft, avgSqft,
         concreteCost: cc, laborRate: lr,
         wallMaterials: calcs.wallMaterials,
         wallLabor: calcs.wallLabor,
@@ -285,6 +304,15 @@ export default function EnvelopeEstimator() {
         totalEnvelope: calcs.totalEnvelope,
         costPerSqft,
         techFeePerSqft,
+        foundationItems: foundationItems.map(item => ({
+          name: item.name,
+          bidCost: parseNum(item.bidCost),
+          units: parseNum(item.units),
+          unitPrice: parseNum(item.unitPrice),
+          total: parseNum(item.bidCost) > 0 ? parseNum(item.bidCost) : parseNum(item.units) * parseNum(item.unitPrice),
+        })),
+        foundationSubtotal,
+        foundationCostPerSqft,
       };
       const res = await fetch("/api/submit", {
         method: "POST",
@@ -310,16 +338,19 @@ export default function EnvelopeEstimator() {
       <h2 className="text-xl font-bold text-gray-800">Project Information</h2>
       <p className="text-sm text-gray-500">Tell us about your project and how to reach you.</p>
       <TextInput label={<RequiredLabel>Project Name</RequiredLabel>} value={projectName} onChange={setProjectName} placeholder="e.g. Sunset Residence" error={showValidation && !projectName} />
-      <TextInput label="Street Address" value={street} onChange={setStreet} placeholder="123 Main St" />
+      <TextInput label={<RequiredLabel>Street Address</RequiredLabel>} value={street} onChange={setStreet} placeholder="123 Main St" error={showValidation && !street} />
       <div className="grid grid-cols-3 gap-3">
         <TextInput label="City" value={city} onChange={setCity} placeholder="City" />
         <SelectInput label="State" value={state} onChange={setState} options={US_STATES} placeholder="Select..." />
         <TextInput label="County" value={county} onChange={setCounty} placeholder="County" />
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        <TextInput label={<RequiredLabel>Builder Name</RequiredLabel>} value={builderName} onChange={setBuilderName} placeholder="Your name" error={showValidation && !builderName} />
-        <TextInput label={<RequiredLabel>Email</RequiredLabel>} value={builderEmail} onChange={setBuilderEmail} placeholder="you@example.com" error={showValidation && !builderEmail} />
-        <TextInput label={<RequiredLabel>Phone</RequiredLabel>} value={builderPhone} onChange={setBuilderPhone} placeholder="(555) 123-4567" error={showValidation && !builderPhone} />
+      <div className="grid grid-cols-2 gap-3">
+        <TextInput label={<RequiredLabel>First Name</RequiredLabel>} value={firstName} onChange={setFirstName} placeholder="First name" error={showValidation && !firstName} />
+        <TextInput label={<RequiredLabel>Last Name</RequiredLabel>} value={lastName} onChange={setLastName} placeholder="Last name" error={showValidation && !lastName} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <TextInput label={<RequiredLabel>Builder Email</RequiredLabel>} value={builderEmail} onChange={setBuilderEmail} placeholder="you@example.com" error={showValidation && !builderEmail} />
+        <TextInput label="Builder Phone" value={builderPhone} onChange={setBuilderPhone} placeholder="(555) 123-4567" />
       </div>
       <CurrencyInput label="Builder Sales Price" value={salesPrice} onChange={setSalesPrice} placeholder="0" hint="The total price you plan to sell this home for. You can add this later." />
       {showValidation && !step1Valid && <p className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> Please fill in all required fields.</p>}
@@ -329,12 +360,13 @@ export default function EnvelopeEstimator() {
   const renderStep2 = (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-gray-800">Structure Details</h2>
-      <p className="text-sm text-gray-500">Define the size and local pricing for your project.</p>
-      <SelectInput label={<RequiredLabel>Number of Stories</RequiredLabel>} value={stories} onChange={setStories} options={["1","2","3"]} error={showValidation && !stories} />
-      <div className="grid grid-cols-3 gap-3">
+      <p className="text-sm text-gray-500">Select the number of stories and enter square footage per story. Total calculates automatically.</p>
+      <SelectInput label={<RequiredLabel>Number of Stories</RequiredLabel>} value={stories} onChange={setStories} options={["1","2","3","4"]} error={showValidation && !stories} />
+      <div className="grid grid-cols-2 gap-3">
         <NumberInput label={<RequiredLabel>1st Floor Sqft</RequiredLabel>} value={sqft1} onChange={setSqft1} placeholder="0" error={showValidation && !sqft1} />
         {numStories >= 2 && <NumberInput label="2nd Floor Sqft" value={sqft2} onChange={setSqft2} placeholder="0" />}
         {numStories >= 3 && <NumberInput label="3rd Floor Sqft" value={sqft3} onChange={setSqft3} placeholder="0" />}
+        {numStories >= 4 && <NumberInput label="4th Floor Sqft" value={sqft4} onChange={setSqft4} placeholder="0" />}
       </div>
       {totalSqft > 0 && (
         <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: BRAND.primaryBg }}>
@@ -343,8 +375,8 @@ export default function EnvelopeEstimator() {
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <CurrencyInput label="Concrete Cost per Yard" value={concreteCost} onChange={setConcreteCost} hint="Default $200/cu yd — adjust for your local market" />
-        <CurrencyInput label="General Labor Rate per Hour" value={laborRate} onChange={setLaborRate} hint="Default $40/hr — adjust for your market if needed" />
+        <CurrencyInput label={<RequiredLabel>Concrete Cost per Yard</RequiredLabel>} value={concreteCost} onChange={setConcreteCost} hint="Defaults reflect Southern California averages. Adjust for your local market." />
+        <CurrencyInput label={<RequiredLabel>General Labor Cost per Hour</RequiredLabel>} value={laborRate} onChange={setLaborRate} hint="Adjust to match your local labor costs." />
       </div>
       {showValidation && !step2Valid && <p className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> Please select stories and enter 1st floor sqft.</p>}
     </div>
@@ -403,6 +435,57 @@ export default function EnvelopeEstimator() {
     </div>
   );
 
+  // Foundation item handler
+  const updateFoundationItem = (index, field, value) => {
+    const updated = [...foundationItems];
+    updated[index] = { ...updated[index], [field]: value };
+    setFoundationItems(updated);
+  };
+  const addFoundationItem = () => {
+    setFoundationItems([...foundationItems, { name: "", bidCost: "", units: "", unitPrice: "" }]);
+  };
+  const removeFoundationItem = (index) => {
+    setFoundationItems(foundationItems.filter((_, i) => i !== index));
+  };
+
+  const renderStep4 = (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold text-gray-800">Foundation & Sitework</h2>
+      <p className="text-sm text-gray-500">Enter bid costs or unit pricing for each foundation line item. You can add or remove rows as needed.</p>
+      <div className="space-y-3">
+        {foundationItems.map((item, i) => (
+          <div key={i} className="border rounded-lg p-3 bg-white">
+            <div className="flex items-center justify-between mb-2">
+              <TextInput label="Line Item" value={item.name} onChange={(v) => updateFoundationItem(i, "name", v)} placeholder="e.g. Footings" />
+              {foundationItems.length > 1 && (
+                <button onClick={() => removeFoundationItem(i)} className="ml-2 mt-5 text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <CurrencyInput label="Bid Cost" value={item.bidCost} onChange={(v) => updateFoundationItem(i, "bidCost", v)} placeholder="0" hint="Total bid, OR use units × price" />
+              <NumberInput label="Number of Units" value={item.units} onChange={(v) => updateFoundationItem(i, "units", v)} placeholder="0" />
+              <CurrencyInput label="Unit Price" value={item.unitPrice} onChange={(v) => updateFoundationItem(i, "unitPrice", v)} placeholder="0" />
+            </div>
+            {(parseNum(item.bidCost) > 0 || (parseNum(item.units) > 0 && parseNum(item.unitPrice) > 0)) && (
+              <div className="mt-2 text-sm font-semibold text-right" style={{ color: BRAND.primaryDark }}>
+                Line Total: {fmt(parseNum(item.bidCost) > 0 ? parseNum(item.bidCost) : parseNum(item.units) * parseNum(item.unitPrice))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <button onClick={addFoundationItem} className="flex items-center gap-1 text-sm font-semibold px-3 py-2 rounded-lg border border-dashed" style={{ color: BRAND.primary, borderColor: BRAND.primary }}>
+        <Plus size={16} /> Add Line Item
+      </button>
+      {foundationSubtotal > 0 && (
+        <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: BRAND.primaryBg }}>
+          <span className="font-semibold" style={{ color: BRAND.primaryDark }}>Foundation Subtotal: {fmt(foundationSubtotal)}</span>
+          {totalSqft > 0 && <span className="ml-4 text-gray-500">{fmtDec(foundationCostPerSqft)}/sqft</span>}
+        </div>
+      )}
+    </div>
+  );
+
   // Summary chart data
   const chartData = [
     { name: "Wall Materials", value: calcs.wallMaterials, color: BRAND.primary },
@@ -412,7 +495,7 @@ export default function EnvelopeEstimator() {
     { name: "Tech Fees", value: calcs.totalTechFees, color: "#C2956B" },
   ].filter((d) => d.value > 0);
 
-  const renderStep4 = (
+  const renderStep5 = (
     <div className="space-y-6">
       <div className="text-center">
         <h2 className="text-2xl font-bold text-gray-800">Envelope Cost Summary</h2>
@@ -463,6 +546,23 @@ export default function EnvelopeEstimator() {
         <span className="text-3xl font-bold">{fmt(calcs.totalEnvelope)}</span>
         {totalSqft > 0 && <div className="text-sm opacity-80 mt-1">{fmtDec(costPerSqft)} per sqft</div>}
       </div>
+      {foundationSubtotal > 0 && (
+        <div className="border rounded-lg p-4">
+          <h3 className="font-bold text-sm text-gray-600 uppercase mb-2">Foundation & Sitework</h3>
+          {foundationItems.filter(item => {
+            const total = parseNum(item.bidCost) > 0 ? parseNum(item.bidCost) : parseNum(item.units) * parseNum(item.unitPrice);
+            return total > 0;
+          }).map((item, i) => {
+            const total = parseNum(item.bidCost) > 0 ? parseNum(item.bidCost) : parseNum(item.units) * parseNum(item.unitPrice);
+            return <DisplayField key={i} label={item.name || `Item ${i + 1}`} value={fmt(total)} />;
+          })}
+          <div className="flex justify-between items-baseline py-2 border-t-2 font-bold" style={{ borderColor: BRAND.primary }}>
+            <span className="text-sm">Foundation Subtotal</span>
+            <span className="text-sm">{fmt(foundationSubtotal)}</span>
+          </div>
+          {totalSqft > 0 && <div className="text-xs text-gray-400 text-right">{fmtDec(foundationCostPerSqft)}/sqft</div>}
+        </div>
+      )}
       {sp > 0 && (
         <div className="border rounded-lg p-4">
           <DisplayField label="Builder Sales Price" value={fmt(sp)} />
@@ -483,19 +583,19 @@ export default function EnvelopeEstimator() {
         <CheckCircle size={32} style={{ color: BRAND.primary }} />
       </div>
       <h2 className="text-2xl font-bold text-gray-800 mb-2">Estimate Submitted!</h2>
-      <p className="text-gray-500 mb-6">Your NileBuilt envelope estimate for <strong>{projectName}</strong> has been submitted successfully.</p>
+      <p className="text-gray-500 mb-6">Your NileBuilt envelope estimate for <strong>{projectName}</strong> has been submitted successfully. A copy will be sent to <strong>{builderEmail}</strong>.</p>
       <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: BRAND.primaryBg }}>
         <div className="text-sm text-gray-500">Total Envelope Cost</div>
         <span className="font-bold text-lg" style={{ color: BRAND.primaryDark }}>{fmt(calcs.totalEnvelope)}</span>
       </div>
       <div className="flex gap-3 justify-center">
         <button onClick={() => { setSubmitted(false); setStep(0); }} className="px-5 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: BRAND.primary, color: BRAND.primary }}>New Estimate</button>
-        <button onClick={() => { setSubmitted(false); setStep(3); }} className="px-5 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: BRAND.primary }}>Review Summary</button>
+        <button onClick={() => { setSubmitted(false); setStep(4); }} className="px-5 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: BRAND.primary }}>Review Summary</button>
       </div>
     </div>
   );
 
-  const stepRenderers = [renderStep1, renderStep2, renderStep3, renderStep4];
+  const stepRenderers = [renderStep1, renderStep2, renderStep3, renderStep4, renderStep5];
 
   if (submitted) {
     return (
@@ -532,7 +632,7 @@ export default function EnvelopeEstimator() {
           <div className="text-lg font-bold text-gray-800">{fmt(calcs.totalEnvelope)}</div>
           {totalSqft > 0 && <div className="text-xs text-gray-400">{fmtDec(costPerSqft)}/sqft</div>}
         </div>
-        {step < 3 ? (
+        {step < 4 ? (
           <button onClick={goNext} className="flex items-center gap-2 px-6 py-2.5 rounded-lg font-semibold text-white transition shadow" style={{ backgroundColor: BRAND.primary }}>
             Next <ArrowRight size={18} />
           </button>
