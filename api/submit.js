@@ -70,14 +70,17 @@ export default async function handler(req, res) {
       const avgSqft = p.avgSqft || (totalSqft > 0 && p.stories > 0 ? Math.round(totalSqft / p.stories) : 0);
       const costPerSqft = totalSqft > 0 ? Math.round((p.totalEnvelope || 0) / totalSqft * 100) / 100 : 0;
 
+      // Round all currency values to 2 decimal places to stay within Creator field limits
+      const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
       // Build foundation subform rows
       const foundationRows = (p.foundationItems || [])
         .filter(item => item.total > 0)
         .map(item => ({
           Line_Item: item.name || "",
-          Bid_Cost: item.bidCost || 0,
-          Number_of_Units: item.units || 0,
-          Unit_Price: item.unitPrice || 0,
+          Bid_Cost: Math.round((Number(item.bidCost) || 0) * 100) / 100,
+          Number_of_Units: Math.round((Number(item.units) || 0) * 100) / 100,
+          Unit_Price: Math.round((Number(item.unitPrice) || 0) * 100) / 100,
         }));
 
       // Map individual foundation costs by name lookup (not array index)
@@ -120,21 +123,21 @@ export default async function handler(req, res) {
 
           // Foundation & Sitework
           Foundation_Sitework1: foundationRows.length > 0 ? foundationRows : undefined,
-          Footings_Cost: footingsCost,
-          Foundation_Cost: foundationCost,
-          Slab_Cost: slabCost,
-          Waste_Slab_Cost: wasteSlabCost,
-          Excavation_Soil_Cost: excavationCost,
-          Foundation_Subtotal: p.foundationSubtotal || 0,
-          Foundation_Cost_per_Sqft: p.foundationCostPerSqft || 0,
+          Footings_Cost: r2(footingsCost),
+          Foundation_Cost: r2(foundationCost),
+          Slab_Cost: r2(slabCost),
+          Waste_Slab_Cost: r2(wasteSlabCost),
+          Excavation_Soil_Cost: r2(excavationCost),
+          Foundation_Subtotal: r2(p.foundationSubtotal),
+          Foundation_Cost_per_Sqft: r2(p.foundationCostPerSqft),
 
           // Envelope breakdown
-          Wall_System_Cost: p.wallMaterials || 0,
-          Roof_Cost: p.roof || 0,
-          Floor_Deck_Cost: p.floorDeck || 0,
-          NileBuilt_Technology_Fee: p.totalTechFees || 0,
-          Total_Envelope_Cost: p.totalEnvelope || 0,
-          Cost_Per_Square_Foot: costPerSqft,
+          Wall_System_Cost: r2(p.wallMaterials),
+          Roof_Cost: r2(p.roof),
+          Floor_Deck_Cost: r2(p.floorDeck),
+          NileBuilt_Technology_Fee: r2(p.totalTechFees),
+          Total_Envelope_Cost: r2(p.totalEnvelope),
+          Cost_Per_Square_Foot: r2(costPerSqft),
 
           // Formatted display fields
           Fmt_Wall_System_Cost: fmt(p.wallMaterials),
