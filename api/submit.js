@@ -172,7 +172,10 @@ export default async function handler(req, res) {
 
       if (creatorResult.code !== 3000) {
         console.error("Creator error:", JSON.stringify(creatorResult));
-        throw new Error(creatorResult.error?.message || `Creator error code: ${creatorResult.code}`);
+        // Include full error details so we can debug field-level issues
+        const errMsg = creatorResult.error?.message || creatorResult.message || "";
+        const errDetails = JSON.stringify(creatorResult);
+        throw new Error(`Creator error code: ${creatorResult.code} — ${errMsg} — ${errDetails}`);
       }
     } catch (creatorErr) {
       console.error("Creator save error:", creatorErr.message);
