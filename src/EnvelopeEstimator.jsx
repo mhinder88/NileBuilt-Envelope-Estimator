@@ -66,9 +66,9 @@ const calcLineItem = (bid, units, price) => {
 function CurrencyInput({ value, onChange, placeholder, label, hint, error }) {
   const [focused, setFocused] = useState(false);
   return (
-    <div>
+    <div className="flex flex-col">
       {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
-      {hint && <p className="text-xs text-gray-400 mb-1">{hint}</p>}
+      {hint && <p className="text-xs text-gray-400 mb-1 flex-1">{hint}</p>}
       <div className={`flex items-center border rounded-lg px-3 py-2 bg-white transition ${error ? "border-red-400 ring-1 ring-red-300" : focused ? "border-blue-400 ring-1 ring-blue-200" : "border-gray-300"}`}>
         <span className="text-gray-400 mr-1">$</span>
         <input type="text" inputMode="decimal" className="flex-1 outline-none bg-transparent text-sm" placeholder={placeholder}
