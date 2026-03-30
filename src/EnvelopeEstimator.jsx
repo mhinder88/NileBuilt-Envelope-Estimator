@@ -49,6 +49,7 @@ const FOUNDATION_ITEMS = [
 ];
 
 const ADMIN_PASSWORD = "nilebuilt2024";
+const BUILDER_PASSWORD = "nilebuilt";
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const fmt = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
@@ -170,15 +171,28 @@ function ProgressBar({ steps, current }) {
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export default function EnvelopeEstimator() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState(false);
+
+  const handleLogin = () => {
+    if (loginPassword === BUILDER_PASSWORD || loginPassword === ADMIN_PASSWORD) {
+      setAuthenticated(true);
+      if (loginPassword === ADMIN_PASSWORD) setAdminMode(true);
+      setLoginError(false);
+    } else {
+      setLoginError(true);
+    }
+  };
+
   const [step, setStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [showValidation, setShowValidation] = useState(false);
   // Tech fee values can be set via URL params: ?tf=30&otf=5&slf=3
-  // NileBuilt employees build the link, builders just use it
   const [urlParams] = useState(() => new URLSearchParams(window.location.search));
-  const [adminMode, setAdminMode] = useState(() => urlParams.get("admin") === ADMIN_PASSWORD);
+  const [adminMode, setAdminMode] = useState(false);
 
   // Step 1 — Project Info
   const [projectName, setProjectName] = useState("");
@@ -637,6 +651,36 @@ export default function EnvelopeEstimator() {
           <NileBuiltLogo size={64} />
         </header>
         <main className="flex-1 px-4 py-8">{renderSubmitted()}</main>
+      </div>
+    );
+  }
+
+  // ─── PASSWORD GATE ──────────────────────────────────────────────────────────
+  if (!authenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${BRAND.primaryDark} 0%, ${BRAND.accent} 100%)` }}>
+        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm text-center">
+          <div className="mb-6"><NileBuiltLogo size={80} /></div>
+          <h1 className="text-xl font-bold text-gray-800 mb-2">Envelope Estimator</h1>
+          <p className="text-sm text-gray-500 mb-6">Enter your access code to continue.</p>
+          <input
+            type="password"
+            className={`w-full border rounded-lg px-4 py-3 text-sm mb-3 outline-none transition ${loginError ? "border-red-400 ring-1 ring-red-300" : "border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200"}`}
+            placeholder="Access code"
+            value={loginPassword}
+            onChange={(e) => { setLoginPassword(e.target.value); setLoginError(false); }}
+            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+            autoFocus
+          />
+          {loginError && <p className="text-red-500 text-sm mb-3">Invalid access code.</p>}
+          <button
+            onClick={handleLogin}
+            className="w-full py-3 rounded-lg font-semibold text-white transition"
+            style={{ backgroundColor: BRAND.primary }}
+          >
+            Enter
+          </button>
+        </div>
       </div>
     );
   }
