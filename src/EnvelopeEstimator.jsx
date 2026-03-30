@@ -175,7 +175,10 @@ export default function EnvelopeEstimator() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [showValidation, setShowValidation] = useState(false);
-  const [adminMode, setAdminMode] = useState(false);
+  const [adminMode, setAdminMode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("admin") === ADMIN_PASSWORD;
+  });
 
   // Step 1 — Project Info
   const [projectName, setProjectName] = useState("");
@@ -447,49 +450,38 @@ export default function EnvelopeEstimator() {
         <NumberInput label="Wall Labor Hours" value={wallLaborHoursOverride} onChange={setWallLaborHoursOverride} placeholder={`Auto: ${wallLaborHoursDefault}`} hint="Adjust for your market if needed" />
         {numStories > 1 && <NumberInput label="Floor Labor Hours" value={floorLaborHoursOverride} onChange={setFloorLaborHoursOverride} placeholder={`Auto: ${floorLaborHoursDefault}`} hint="Adjust for your market if needed" />}
       </div>
-      <div className="border-t pt-4 mt-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-700">NileBuilt Technology Fee</h3>
-          {adminMode ? (
-            <button onClick={() => setAdminMode(false)} className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-amber-100 text-amber-700"><Unlock size={12} /> Admin Mode</button>
-          ) : showAdminInput ? (
-            <div className="flex items-center gap-2">
-              <input type="password" className={`border rounded px-2 py-1 text-xs w-32 ${adminError ? "border-red-400" : "border-gray-300"}`}
-                placeholder="Enter password" value={adminPassword} onChange={(e) => { setAdminPassword(e.target.value); setAdminError(false); }}
-                onKeyDown={(e) => e.key === "Enter" && handleAdminUnlock()} autoFocus />
-              <button onClick={handleAdminUnlock} className="text-xs px-2 py-1 rounded bg-blue-500 text-white">Go</button>
-              <button onClick={() => { setShowAdminInput(false); setAdminPassword(""); setAdminError(false); }} className="text-xs text-gray-400">Cancel</button>
-              {adminError && <span className="text-xs text-red-500">Wrong password</span>}
+      {adminMode && (
+        <div className="border-t pt-4 mt-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-700">NileBuilt Technology Fee</h3>
+            <span className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-amber-100 text-amber-700"><Unlock size={12} /> Admin Mode</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tech Fee / sqft</label>
+              <div className="flex items-center border rounded-lg px-3 py-2 bg-white text-sm">
+                <span className="text-gray-400 mr-1">$</span>
+                <input type="text" className="flex-1 outline-none bg-transparent" value={techFeePerSqft}
+                  onChange={(e) => setTechFeePerSqft(parseFloat(e.target.value) || 0)} />
+              </div>
             </div>
-          ) : (
-            <button onClick={() => setShowAdminInput(true)} className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-400"><Lock size={12} /> Locked</button>
-          )}
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tech Fee / sqft</label>
-            <div className="flex items-center border rounded-lg px-3 py-2 bg-gray-50 text-sm">
-              <span className="text-gray-400 mr-1">$</span>
-              <input type="text" className="flex-1 outline-none bg-transparent" value={techFeePerSqft} disabled={!adminMode}
-                onChange={(e) => setTechFeePerSqft(parseFloat(e.target.value) || 0)} />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">One-Time Fee %</label>
+              <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm bg-white" value={oneTimeFee}
+                onChange={(e) => setOneTimeFee(parseFloat(e.target.value) || 0)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sales Lead Fee %</label>
+              <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm bg-white" value={salesLeadFee}
+                onChange={(e) => setSalesLeadFee(parseFloat(e.target.value) || 0)} />
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">One-Time Fee %</label>
-            <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50" value={oneTimeFee} disabled={!adminMode}
-              onChange={(e) => setOneTimeFee(parseFloat(e.target.value) || 0)} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sales Lead Fee %</label>
-            <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50" value={salesLeadFee} disabled={!adminMode}
-              onChange={(e) => setSalesLeadFee(parseFloat(e.target.value) || 0)} />
+          <div className="mt-2 p-3 rounded-lg text-sm" style={{ backgroundColor: BRAND.primaryBg }}>
+            <span className="font-semibold" style={{ color: BRAND.primaryDark }}>Total Tech Fees: {fmt(calcs.totalTechFees)}</span>
+            <span className="ml-4 text-gray-500">{totalSqft > 0 ? fmtDec(calcs.totalTechFees / totalSqft) + "/sqft" : ""}</span>
           </div>
         </div>
-        <div className="mt-2 p-3 rounded-lg text-sm" style={{ backgroundColor: BRAND.primaryBg }}>
-          <span className="font-semibold" style={{ color: BRAND.primaryDark }}>Total Tech Fees: {fmt(calcs.totalTechFees)}</span>
-          <span className="ml-4 text-gray-500">{totalSqft > 0 ? fmtDec(calcs.totalTechFees / totalSqft) + "/sqft" : ""}</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 
