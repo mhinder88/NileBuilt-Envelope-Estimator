@@ -31,10 +31,21 @@ const CRANE_PRICING = { 50: 1500, 75: 2500, 100: 3500, 125: 4000, 150: 5000 };
 
 const FOUNDATION_ITEMS = [
   { name: "Footings", id: "footings" },
-  { name: "Foundation Walls", id: "foundation" },
+  { name: "Foundation", id: "foundation" },
   { name: "Slab", id: "slab" },
-  { name: "Waste / Slab Overpour", id: "wasteSlab" },
   { name: "Excavation / Soil", id: "excavation" },
+  { name: "Waste Slab", id: "wasteSlab" },
+  { name: "Caissons / Pier Drilling", id: "caissonsDrilling" },
+  { name: "Caissons / Pier Steel", id: "caissonsSteel" },
+  { name: "Caissons / Pier Concrete", id: "caissonsConcrete" },
+  { name: "Piles", id: "piles" },
+  { name: "Footing Excavation", id: "footingExcavation" },
+  { name: "Spoils Removal", id: "spoilsRemoval" },
+  { name: "Forms", id: "forms" },
+  { name: "Structural Hardware", id: "structuralHardware" },
+  { name: "Concrete Foundation", id: "concreteFoundation" },
+  { name: "Concrete Slab", id: "concreteSlab" },
+  { name: "Garage Slab", id: "garageSlab" },
 ];
 
 const ADMIN_PASSWORD = "nilebuilt2024";

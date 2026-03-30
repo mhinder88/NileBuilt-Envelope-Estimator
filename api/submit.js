@@ -80,13 +80,14 @@ export default async function handler(req, res) {
           Unit_Price: item.unitPrice || 0,
         }));
 
-      // Map individual foundation costs from line items
+      // Map individual foundation costs by name lookup (not array index)
       const fi = p.foundationItems || [];
-      const footingsCost = fi[0]?.total || 0;
-      const foundationCost = fi[1]?.total || 0;
-      const slabCost = fi[2]?.total || 0;
-      const wasteSlabCost = fi[3]?.total || 0;
-      const excavationCost = fi[4]?.total || 0;
+      const findCost = (name) => (fi.find(i => i.name === name) || {}).total || 0;
+      const footingsCost = findCost("Footings");
+      const foundationCost = findCost("Foundation");
+      const slabCost = findCost("Slab");
+      const wasteSlabCost = findCost("Waste Slab");
+      const excavationCost = findCost("Excavation / Soil");
 
       const creatorData = {
         data: {
