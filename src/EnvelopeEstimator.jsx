@@ -277,7 +277,7 @@ export default function EnvelopeEstimator() {
     const wallLaborCost = lr * wallLaborHours;
     const panelInstall = finalPanelCount * 85;
     const wallBraces = finalPanelCount * 25;
-    const craneWalls = cranePricing[100] || 3500;
+    const craneWalls = totalSqft > 0 ? (cranePricing[100] || 3500) : 0;
     const wallLabor = wallLaborCost + panelInstall + wallBraces + craneWalls;
 
     let floorDeck = 0;
@@ -299,7 +299,7 @@ export default function EnvelopeEstimator() {
 
     const roofMaterials = totalSqft * 4.5;
     const roofLabor = totalSqft * 3.5;
-    const roofCrane = cranePricing[100] || 3500;
+    const roofCrane = totalSqft > 0 ? (cranePricing[100] || 3500) : 0;
     const roofMisc = totalSqft * 2.5;
     const roof = roofMaterials + roofLabor + roofCrane + roofMisc;
 
@@ -321,6 +321,7 @@ export default function EnvelopeEstimator() {
   const foundationCostPerSqft = totalSqft > 0 ? foundationSubtotal / totalSqft : 0;
 
   const costPerSqft = totalSqft > 0 ? calcs.totalEnvelope / totalSqft : 0;
+  const totalExTech = calcs.totalEnvelope - calcs.totalTechFees;
   const profit = sp - calcs.totalEnvelope;
   const profitMargin = sp > 0 ? profit / sp : 0;
 
@@ -691,7 +692,7 @@ export default function EnvelopeEstimator() {
         <NileBuiltLogo size={64} />
         <div className="text-right">
           <div className="text-sm" style={{ color: BRAND.primaryLight }}>Estimated Total</div>
-          <div className="text-xl font-bold">{fmt(calcs.totalEnvelope)}</div>
+          <div className="text-xl font-bold">{fmt(step === 4 ? calcs.totalEnvelope : totalExTech)}</div>
           {totalSqft > 0 && <div className="text-xs" style={{ color: BRAND.primaryLight }}>{fmtDec(costPerSqft)}/sqft</div>}
         </div>
       </header>
@@ -706,7 +707,7 @@ export default function EnvelopeEstimator() {
         </button>
         <div className="text-center">
           <div className="text-xs text-gray-400">Estimated Total</div>
-          <div className="text-lg font-bold text-gray-800">{fmt(calcs.totalEnvelope)}</div>
+          <div className="text-lg font-bold text-gray-800">{fmt(step === 4 ? calcs.totalEnvelope : totalExTech)}</div>
           {totalSqft > 0 && <div className="text-xs text-gray-400">{fmtDec(costPerSqft)}/sqft</div>}
         </div>
         {step < 4 ? (
