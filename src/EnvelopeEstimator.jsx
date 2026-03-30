@@ -80,9 +80,9 @@ function CurrencyInput({ value, onChange, placeholder, label, hint, error }) {
 
 function NumberInput({ value, onChange, placeholder, label, hint, error }) {
   return (
-    <div>
+    <div className="flex flex-col">
       {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
-      {hint && <p className="text-xs text-gray-400 mb-1">{hint}</p>}
+      {hint && <p className="text-xs text-gray-400 mb-1 flex-1">{hint}</p>}
       <input type="text" inputMode="decimal" className={`w-full border rounded-lg px-3 py-2 text-sm bg-white transition ${error ? "border-red-400 ring-1 ring-red-300" : "border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200"}`}
         placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
@@ -445,7 +445,7 @@ export default function EnvelopeEstimator() {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <NumberInput label="Wall Labor Hours" value={wallLaborHoursOverride} onChange={setWallLaborHoursOverride} placeholder={`Auto: ${wallLaborHoursDefault}`} hint="Adjust for your market if needed" />
-        {numStories > 1 && <NumberInput label="Floor Labor Hours" value={floorLaborHoursOverride} onChange={setFloorLaborHoursOverride} placeholder={`Auto: ${floorLaborHoursDefault}`} />}
+        {numStories > 1 && <NumberInput label="Floor Labor Hours" value={floorLaborHoursOverride} onChange={setFloorLaborHoursOverride} placeholder={`Auto: ${floorLaborHoursDefault}`} hint="Adjust for your market if needed" />}
       </div>
       <div className="border-t pt-4 mt-4">
         <div className="flex items-center justify-between mb-3">
