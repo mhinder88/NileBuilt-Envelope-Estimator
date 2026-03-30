@@ -440,7 +440,7 @@ export default function EnvelopeEstimator() {
   const renderStep3 = (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-gray-800">NileBuilt Setup</h2>
-      <p className="text-sm text-gray-500">Panel configuration and technology fees.</p>
+      <p className="text-sm text-gray-500">Panel configuration and labor estimates.</p>
       <NumberInput label="Override Panel Count" value={overridePanels} onChange={setOverridePanels} placeholder={`Auto: ${autoPanelCount}`} hint="Leave blank to use auto-calculated count" />
       <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: BRAND.primaryBg }}>
         <span className="font-semibold" style={{ color: BRAND.primaryDark }}>Panels: {finalPanelCount}</span>
