@@ -74,6 +74,7 @@ export default function AuthGate({ appTitle = "Envelope Estimator", children }) 
         password,
         options: {
           data: { first_name: firstName, last_name: lastName },
+          emailRedirectTo: window.location.origin,
         },
       });
       if (error) throw error;
