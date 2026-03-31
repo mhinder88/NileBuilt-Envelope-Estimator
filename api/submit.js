@@ -185,9 +185,73 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Failed to save estimate to backend. " + creatorErr.message });
     }
 
+    // 2. Sync to Zoho CRM — NileBuilt_Estimates module
+    let crmResult = null;
+    try {
+      const totalSqft = p.totalSqft || 0;
+      const totalEnvelope = p.totalEnvelope || 0;
+      const costPerSqft = totalSqft > 0 ? Math.round(totalEnvelope / totalSqft * 100) / 100 : 0;
+
+      const crmData = {
+        data: [{
+          Name: p.Project_Title || "",
+          Estimate_Type: "Envelope",
+          Estimate_Date: new Date().toISOString().split("T")[0],
+          Street_Address: p.street || "",
+          City: p.city || "",
+          State: p.state || "",
+          County: p.county || "",
+          Builder_Email: p.builderEmail || "",
+          Homeowner_Name: `${p.firstName || ""} ${p.lastName || ""}`.trim(),
+          Number_of_Stories: parseInt(p.stories) || 1,
+          Total_Square_Footage: totalSqft,
+          Avg_Sqft_Per_Story: totalSqft > 0 && p.stories > 0 ? Math.round(totalSqft / p.stories) : 0,
+
+          // Envelope costs
+          Subtotal_Wall_Materials: p.wallMaterials || 0,
+          Total_Wall_Cost: p.wallMaterials || 0,
+          Total_Floor_Deck_Cost: p.floorDeck || 0,
+          Floor_Deck_Cost: p.floorDeck || 0,
+          Total_Roof_Cost: p.roof || 0,
+          Structure_Subtotal: p.structureSubtotal || ((p.wallMaterials || 0) + (p.floorDeck || 0) + (p.roof || 0)),
+          Subtotal_NileBuilt_Technology: p.totalTechFees || 0,
+
+          // Foundation
+          Subtotal_Foundation: p.foundationSubtotal || 0,
+
+          // Totals
+          Total_Project_Cost: totalEnvelope + (p.foundationSubtotal || 0),
+          Cost_Per_SF: costPerSqft,
+          Status: "New",
+        }],
+      };
+
+      const crmRes = await fetch("https://www.zohoapis.com/crm/v2/NileBuilt_Estimates", {
+        method: "POST",
+        headers: {
+          Authorization: `Zoho-oauthtoken ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(crmData),
+      });
+
+      const crmText = await crmRes.text();
+      try { crmResult = JSON.parse(crmText); } catch (e) { console.error("CRM non-JSON:", crmText); }
+
+      if (crmResult?.data?.[0]?.code !== "SUCCESS") {
+        console.error("CRM error:", JSON.stringify(crmResult));
+      } else {
+        console.log("CRM record created:", crmResult.data[0].details.id);
+      }
+    } catch (crmErr) {
+      console.error("CRM sync error:", crmErr.message);
+      // Don't fail the request — Creator save is the primary target
+    }
+
     return res.status(200).json({
       success: true,
       recordId: creatorResult?.data?.ID,
+      crmRecordId: crmResult?.data?.[0]?.details?.id,
       message: "Envelope estimate submitted successfully",
     });
   } catch (err) {
