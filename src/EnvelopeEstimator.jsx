@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { CheckCircle, ArrowLeft, ArrowRight, Building2, Settings2, BarChart3, ClipboardList, Lock, Unlock, Send, AlertCircle, Landmark } from "lucide-react";
 
@@ -53,6 +53,8 @@ const BUILDER_PASSWORD = "nilebuilt";
 
 // Supabase client for saving estimates
 import { supabase } from "./supabaseClient";
+import { loadSmartDefaults, applyFieldDefaults, applyFoundationDefaults, SmartDefaultsBanner } from "./smartDefaults.jsx";
+import { saveDraftDebounced, deleteDraft, cancelPendingSave } from "./draftManager";
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const fmt = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
@@ -189,8 +191,10 @@ function ProgressBar({ steps, current }) {
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
-export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDashboard }) {
-  const [step, setStep] = useState(0);
+export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDashboard, initialData }) {
+  // If resuming a draft, pre-populate from initialData
+  const d = initialData || {};
+  const [step, setStep] = useState(d._draftStep || 0);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -200,41 +204,44 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
   const [adminMode, setAdminMode] = useState(false);
 
   // Step 1 — Project Info
-  const [projectName, setProjectName] = useState("");
-  const [street, setStreet] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [county, setCounty] = useState("");
-  const [firstName, setFirstName] = useState(user?.user_metadata?.first_name || "");
-  const [lastName, setLastName] = useState(user?.user_metadata?.last_name || "");
-  const [builderEmail, setBuilderEmail] = useState(user?.email || "");
-  const [builderPhone, setBuilderPhone] = useState("");
-  const [salesPrice, setSalesPrice] = useState("");
+  const [projectName, setProjectName] = useState(d.projectName || "");
+  const [street, setStreet] = useState(d.street || "");
+  const [city, setCity] = useState(d.city || "");
+  const [state, setState] = useState(d.state || "");
+  const [county, setCounty] = useState(d.county || "");
+  const [firstName, setFirstName] = useState(d.firstName || user?.user_metadata?.first_name || "");
+  const [lastName, setLastName] = useState(d.lastName || user?.user_metadata?.last_name || "");
+  const [builderEmail, setBuilderEmail] = useState(d.builderEmail || user?.email || "");
+  const [builderPhone, setBuilderPhone] = useState(d.builderPhone || "");
+  const [salesPrice, setSalesPrice] = useState(d.salesPrice || "");
 
   // Step 2 — Structure
-  const [stories, setStories] = useState("");
-  const [sqft1, setSqft1] = useState("");
-  const [sqft2, setSqft2] = useState("");
-  const [sqft3, setSqft3] = useState("");
-  const [sqft4, setSqft4] = useState("");
-  const [concreteCost, setConcreteCost] = useState("200");
-  const [laborRate, setLaborRate] = useState("40");
+  const [stories, setStories] = useState(d.stories || "");
+  const [sqft1, setSqft1] = useState(d.sqft1 || "");
+  const [sqft2, setSqft2] = useState(d.sqft2 || "");
+  const [sqft3, setSqft3] = useState(d.sqft3 || "");
+  const [sqft4, setSqft4] = useState(d.sqft4 || "");
+  const [concreteCost, setConcreteCost] = useState(d.concreteCost || "200");
+  const [laborRate, setLaborRate] = useState(d.laborRate || "40");
 
   // Step 3 — NileBuilt Setup
-  const [overridePanels, setOverridePanels] = useState("");
-  const [wallLaborHoursOverride, setWallLaborHoursOverride] = useState("");
-  const [floorLaborHoursOverride, setFloorLaborHoursOverride] = useState("");
+  const [overridePanels, setOverridePanels] = useState(d.overridePanels || "");
+  const [wallLaborHoursOverride, setWallLaborHoursOverride] = useState(d.wallLaborHoursOverride || "");
+  const [floorLaborHoursOverride, setFloorLaborHoursOverride] = useState(d.floorLaborHoursOverride || "");
   const [techFeePerSqft, setTechFeePerSqft] = useState(() => {
+    if (d.techFeePerSqft != null) return d.techFeePerSqft;
     const v = parseFloat(urlParams.get("tf")); return isNaN(v) ? 30 : v;
   });
   const [oneTimeFee, setOneTimeFee] = useState(() => {
+    if (d.oneTimeFee != null) return d.oneTimeFee;
     const v = parseFloat(urlParams.get("otf")); return isNaN(v) ? 0 : v;
   });
   const [salesLeadFee, setSalesLeadFee] = useState(() => {
+    if (d.salesLeadFee != null) return d.salesLeadFee;
     const v = parseFloat(urlParams.get("slf")); return isNaN(v) ? 0 : v;
   });
-  const [openingAllowance, setOpeningAllowance] = useState("15");
-  const [levels, setLevels] = useState({
+  const [openingAllowance, setOpeningAllowance] = useState(d.openingAllowance || "15");
+  const [levels, setLevels] = useState(d.levels || {
     floor1: { joist: "16", decking: "18", crane: "50" },
     floor2: { joist: "16", decking: "18", crane: "50" },
     floor3: { joist: "16", decking: "18", crane: "50" },
@@ -242,10 +249,76 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
   });
 
   // Step 4 — Foundation & Sitework
-  const [foundationData, setFoundationData] = useState({});
-  const [joistPricing, setJoistPricing] = useState({ ...JOIST_PRICING });
-  const [deckingPricing, setDeckingPricing] = useState({ ...DECKING_PRICING });
-  const [cranePricing, setCranePricing] = useState({ ...CRANE_PRICING });
+  const [foundationData, setFoundationData] = useState(d.foundationData || {});
+  const [joistPricing, setJoistPricing] = useState(d.joistPricing || { ...JOIST_PRICING });
+  const [deckingPricing, setDeckingPricing] = useState(d.deckingPricing || { ...DECKING_PRICING });
+  const [cranePricing, setCranePricing] = useState(d.cranePricing || { ...CRANE_PRICING });
+
+  // Smart Defaults
+  const [smartDefaultsApplied, setSmartDefaultsApplied] = useState(0);
+  const [showDefaultsBanner, setShowDefaultsBanner] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    loadSmartDefaults(user.id, "envelope").then((defaults) => {
+      if (!defaults?.hasDefaults) return;
+      let total = 0;
+
+      // Apply simple field defaults
+      const fieldCount = applyFieldDefaults(defaults, {
+        concreteCost: setConcreteCost,
+        laborRate: setLaborRate,
+        openingAllowance: setOpeningAllowance,
+      });
+      total += fieldCount;
+
+      // Apply foundation defaults
+      const { data: newFoundation, applied: foundationCount } =
+        applyFoundationDefaults(defaults, {});
+      if (foundationCount > 0) {
+        setFoundationData(newFoundation);
+        total += foundationCount;
+      }
+
+      if (total > 0) {
+        setSmartDefaultsApplied(total);
+        setShowDefaultsBanner(true);
+      }
+    });
+  }, [user?.id]);
+
+  // ─── Auto-save draft on changes ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!user?.id || submitted) return;
+    // Only auto-save if the user has entered at least a project name
+    if (!projectName) return;
+    const formData = {
+      projectName, street, city, state, county,
+      firstName, lastName, builderEmail, builderPhone, salesPrice,
+      stories, sqft1, sqft2, sqft3, sqft4,
+      concreteCost, laborRate,
+      overridePanels, wallLaborHoursOverride, floorLaborHoursOverride,
+      techFeePerSqft, oneTimeFee, salesLeadFee,
+      openingAllowance, levels, foundationData,
+      joistPricing, deckingPricing, cranePricing,
+    };
+    saveDraftDebounced(user.id, "envelope", step, formData);
+  }, [
+    projectName, street, city, state, county,
+    firstName, lastName, builderEmail, builderPhone, salesPrice,
+    stories, sqft1, sqft2, sqft3, sqft4,
+    concreteCost, laborRate, step,
+    overridePanels, wallLaborHoursOverride, floorLaborHoursOverride,
+    techFeePerSqft, oneTimeFee, salesLeadFee,
+    openingAllowance, levels, foundationData,
+    joistPricing, deckingPricing, cranePricing,
+    user?.id, submitted,
+  ]);
+
+  // Cancel pending save on unmount
+  useEffect(() => {
+    return () => cancelPendingSave();
+  }, []);
 
   // Derived
   const numStories = parseInt(stories) || 0;
@@ -434,7 +507,7 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
             app_source: "envelope",
             estimate_data: {
               builderPhone, salesPrice: sp,
-              concreteCost: cc, laborRate: lr,
+              concreteCost: cc, laborRate: lr, openingAllowance: parseNum(openingAllowance),
               wallMaterials: calcs.wallMaterials,
               wallLabor: calcs.wallLabor,
               floorDeck: calcs.floorDeck,
@@ -445,7 +518,7 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
               costPerSqft,
               foundationItems: FOUNDATION_ITEMS.map(item => {
                 const d = foundationData[item.id] || {};
-                return { name: item.name, total: calcLineItem(d.bid, d.units, d.price) };
+                return { name: item.name, id: item.id, bid: parseNum(d.bid), units: parseNum(d.units), price: parseNum(d.price), total: calcLineItem(d.bid, d.units, d.price) };
               }),
               foundationSubtotal,
               totalSqft,
@@ -455,6 +528,9 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
           console.error("Supabase save error (non-blocking):", sbErr);
         }
       }
+      // Delete draft after successful submit
+      cancelPendingSave();
+      deleteDraft(user.id, "envelope");
       setSubmitted(true);
     } catch (err) {
       setSubmitError(err.message);
@@ -758,6 +834,12 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
         </div>
       </header>
       <ProgressBar steps={STEPS} current={step} />
+      {showDefaultsBanner && step === 0 && (
+        <SmartDefaultsBanner
+          appliedCount={smartDefaultsApplied}
+          onDismiss={() => setShowDefaultsBanner(false)}
+        />
+      )}
       <main className="flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-2xl mx-auto">{stepRenderers[step]}</div>
       </main>

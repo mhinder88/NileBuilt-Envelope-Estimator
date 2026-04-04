@@ -16,7 +16,8 @@ function App() {
 }
 
 function AppRouter({ session, user, signOut }) {
-  const [view, setView] = useState("dashboard"); // dashboard | estimator
+  const [view, setView] = useState("dashboard");
+  const [draftData, setDraftData] = useState(null);
 
   if (view === "estimator") {
     return (
@@ -24,7 +25,8 @@ function AppRouter({ session, user, signOut }) {
         user={user}
         session={session}
         onSignOut={signOut}
-        onBackToDashboard={() => setView("dashboard")}
+        onBackToDashboard={() => { setDraftData(null); setView("dashboard"); }}
+        initialData={draftData}
       />
     );
   }
@@ -32,7 +34,7 @@ function AppRouter({ session, user, signOut }) {
   return (
     <EstimatesDashboard
       user={user}
-      onNewEstimate={() => setView("estimator")}
+      onNewEstimate={(draft) => { setDraftData(draft || null); setView("estimator"); }}
       onSignOut={signOut}
       appSource="envelope"
     />

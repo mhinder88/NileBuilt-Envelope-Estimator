@@ -37,6 +37,82 @@ function fmt(n) {
   }).format(n || 0);
 }
 
+// ─── Find or create Lead, then link estimate ───────────────────────────────
+async function findOrCreateLead(token, { email, firstName, lastName, phone, street, city, state, county, company }) {
+  if (!email) return null;
+
+  // 1. Search for existing Lead by email
+  try {
+    const searchRes = await fetch(
+      `https://www.zohoapis.com/crm/v2/Leads/search?email=${encodeURIComponent(email)}`,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}` } }
+    );
+    const searchData = await searchRes.json();
+    if (searchData.data && searchData.data.length > 0) {
+      console.log("Found existing Lead:", searchData.data[0].id);
+      return searchData.data[0].id;
+    }
+  } catch (err) {
+    console.error("Lead search error:", err.message);
+  }
+
+  // 2. Search Contacts by email (in case they were converted)
+  try {
+    const contactRes = await fetch(
+      `https://www.zohoapis.com/crm/v2/Contacts/search?email=${encodeURIComponent(email)}`,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}` } }
+    );
+    const contactData = await contactRes.json();
+    if (contactData.data && contactData.data.length > 0) {
+      console.log("Found existing Contact:", contactData.data[0].id);
+      // Builder_Lead field points to Leads module, so we can't link a Contact ID here
+      return null;
+    }
+  } catch (err) {
+    console.error("Contact search error:", err.message);
+  }
+
+  // 3. Create new Lead
+  try {
+    const leadData = {
+      data: [{
+        First_Name: firstName || "",
+        Last_Name: lastName || email.split("@")[0],
+        Email: email,
+        Phone: phone || "",
+        Company: company || "Individual",
+        Lead_Source: "NileBuilt Estimator App",
+        Street: street || "",
+        City: city || "",
+        State: state || "",
+        Description: `Lead created automatically from NileBuilt Estimator App submission.`,
+      }],
+    };
+
+    const createRes = await fetch("https://www.zohoapis.com/crm/v2/Leads", {
+      method: "POST",
+      headers: {
+        Authorization: `Zoho-oauthtoken ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(leadData),
+    });
+
+    const createData = await createRes.json();
+    if (createData.data?.[0]?.code === "SUCCESS") {
+      const leadId = createData.data[0].details.id;
+      console.log("Created new Lead:", leadId);
+      return leadId;
+    } else {
+      console.error("Lead creation error:", JSON.stringify(createData));
+      return null;
+    }
+  } catch (err) {
+    console.error("Lead creation error:", err.message);
+    return null;
+  }
+}
+
 // ─── Main handler ───────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -185,7 +261,25 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Failed to save estimate to backend. " + creatorErr.message });
     }
 
-    // 2. Sync to Zoho CRM — NileBuilt_Estimates module
+    // 2. Find or create Lead in CRM
+    let leadId = null;
+    try {
+      leadId = await findOrCreateLead(token, {
+        email: p.builderEmail,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        phone: p.builderPhone,
+        street: p.street,
+        city: p.city,
+        state: p.state,
+        county: p.county,
+        company: "",
+      });
+    } catch (leadErr) {
+      console.error("Lead lookup error:", leadErr.message);
+    }
+
+    // 3. Sync to Zoho CRM — NileBuilt_Estimates module
     let crmResult = null;
     try {
       const totalSqft = p.totalSqft || 0;
@@ -206,6 +300,7 @@ export default async function handler(req, res) {
           Number_of_Stories: parseInt(p.stories) || 1,
           Total_Square_Footage: totalSqft,
           Avg_Sqft_Per_Story: totalSqft > 0 && p.stories > 0 ? Math.round(totalSqft / p.stories) : 0,
+          ...(leadId ? { Builder_Lead: { id: leadId } } : {}),
 
           // Envelope costs
           Subtotal_Wall_Materials: p.wallMaterials || 0,

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import { LOGO_SRC } from "./logo";
+import { generateEstimatePDF } from "./pdfGenerator";
 
 // ─── BRAND ───────────────────────────────────────────────────────────────────
 const BRAND = {
@@ -35,7 +36,7 @@ function NileBuiltLogo({ size = 64 }) {
 }
 
 // ─── ESTIMATE DETAIL VIEW ────────────────────────────────────────────────────
-function EstimateDetail({ estimate, onBack }) {
+function EstimateDetail({ estimate, onBack, onDuplicate }) {
   const d = estimate.estimate_data || {};
   const totalSqft = d.totalSqft || estimate.total_sqft || 0;
   const costPerSqft = d.costPerSqft || estimate.cost_per_sqft || 0;
@@ -62,9 +63,31 @@ function EstimateDetail({ estimate, onBack }) {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6">
-        <button onClick={onBack} className="flex items-center gap-1 text-sm font-semibold mb-4" style={{ color: BRAND.primary }}>
-          ← Back to My Estimates
-        </button>
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={onBack} className="flex items-center gap-1 text-sm font-semibold" style={{ color: BRAND.primary }}>
+            ← Back to My Estimates
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => generateEstimatePDF(estimate)}
+              className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg border transition hover:shadow-sm"
+              style={{ borderColor: BRAND.primary, color: BRAND.primary }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              PDF
+            </button>
+            {onDuplicate && (
+              <button
+                onClick={() => onDuplicate(estimate)}
+                className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg border transition hover:shadow-sm"
+                style={{ borderColor: BRAND.primary, color: BRAND.primary }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Duplicate
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* Project Info */}
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
@@ -144,6 +167,7 @@ function EstimateDetail({ estimate, onBack }) {
 // ─── MAIN DASHBOARD ──────────────────────────────────────────────────────────
 export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, appSource }) {
   const [estimates, setEstimates] = useState([]);
+  const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedEstimate, setSelectedEstimate] = useState(null);
 
@@ -154,6 +178,7 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
   const fetchEstimates = async () => {
     setLoading(true);
     try {
+      // Fetch submitted estimates
       let query = supabase
         .from("estimates")
         .select("*")
@@ -167,6 +192,18 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
       const { data, error } = await query;
       if (error) throw error;
       setEstimates(data || []);
+
+      // Fetch draft
+      const { data: draftData } = await supabase
+        .from("estimates")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("app_source", `${appSource}_draft`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      setDraft(draftData || null);
     } catch (err) {
       console.error("Error fetching estimates:", err);
     } finally {
@@ -174,8 +211,49 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
     }
   };
 
+  const deleteDraft = async () => {
+    if (!draft) return;
+    await supabase
+      .from("estimates")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("app_source", `${appSource}_draft`);
+    setDraft(null);
+  };
+
+  const handleDuplicate = (est) => {
+    const ed = est.estimate_data || {};
+    // Build a data object that the estimator can use as initialData
+    const duplicateData = {
+      ...ed,
+      projectName: (est.project_title || "") + " (Copy)",
+      street: est.street_address || ed.street || "",
+      city: est.city || ed.city || "",
+      state: est.state || ed.state || "",
+      county: ed.county || "",
+      firstName: est.builder_first_name || ed.firstName || "",
+      lastName: est.builder_last_name || ed.lastName || "",
+      builderEmail: est.builder_email || ed.builderEmail || "",
+      builderPhone: ed.builderPhone || "",
+      salesPrice: ed.salesPrice || "",
+      stories: String(est.stories || ed.stories || ""),
+      sqft1: ed.sqft1 || "",
+      sqft2: ed.sqft2 || "",
+      sqft3: ed.sqft3 || "",
+      sqft4: ed.sqft4 || "",
+      _draftStep: 0, // Start from step 1 so they can review
+    };
+    onNewEstimate(duplicateData);
+  };
+
   if (selectedEstimate) {
-    return <EstimateDetail estimate={selectedEstimate} onBack={() => setSelectedEstimate(null)} />;
+    return (
+      <EstimateDetail
+        estimate={selectedEstimate}
+        onBack={() => setSelectedEstimate(null)}
+        onDuplicate={handleDuplicate}
+      />
+    );
   }
 
   const userName =
@@ -209,6 +287,45 @@ export default function EstimatesDashboard({ user, onNewEstimate, onSignOut, app
         >
           + New Estimate
         </button>
+
+        {/* Draft Card */}
+        {draft && (
+          <div
+            className="mb-6 rounded-xl p-4 border-2 border-dashed shadow-sm"
+            style={{ borderColor: BRAND.primary, backgroundColor: BRAND.primaryBg }}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold text-white" style={{ backgroundColor: BRAND.primary }}>
+                    Draft
+                  </span>
+                  <span className="font-semibold text-gray-800">{draft.project_title || "Untitled"}</span>
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Last saved {new Date(draft.estimate_data?._savedAt || draft.created_at).toLocaleDateString("en-US", {
+                    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+                  })}
+                  {draft.estimate_data?._draftStep != null && ` · Step ${draft.estimate_data._draftStep + 1}`}
+                </div>
+              </div>
+              <button
+                onClick={deleteDraft}
+                className="text-gray-400 hover:text-red-500 text-sm px-2"
+                title="Discard draft"
+              >
+                Discard
+              </button>
+            </div>
+            <button
+              onClick={() => onNewEstimate(draft.estimate_data)}
+              className="w-full mt-3 py-2.5 rounded-lg font-semibold text-white transition hover:opacity-90"
+              style={{ backgroundColor: BRAND.primary }}
+            >
+              Resume Estimate →
+            </button>
+          </div>
+        )}
 
         <h2 className="text-lg font-bold text-gray-800 mb-4">Past Estimates</h2>
 
