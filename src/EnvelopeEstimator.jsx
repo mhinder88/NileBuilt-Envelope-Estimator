@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { CheckCircle, ArrowLeft, ArrowRight, Building2, Settings2, BarChart3, ClipboardList, Lock, Unlock, Send, AlertCircle, Landmark } from "lucide-react";
+import AddressAutocomplete from "./AddressAutocomplete";
 
 // ─── BRAND ────────────────────────────────────────────────────────────────────
 const BRAND = {
@@ -546,7 +547,17 @@ export default function EnvelopeEstimator({ user, session, onSignOut, onBackToDa
       <h2 className="text-xl font-bold text-gray-800">Project Information</h2>
       <p className="text-sm text-gray-500">Tell us about your project and how to reach you.</p>
       <TextInput label={<RequiredLabel>Project Name</RequiredLabel>} value={projectName} onChange={setProjectName} placeholder="e.g. Sunset Residence" error={showValidation && !projectName} />
-      <TextInput label={<RequiredLabel>Street Address</RequiredLabel>} value={street} onChange={setStreet} placeholder="123 Main St" error={showValidation && !street} />
+      <AddressAutocomplete
+        label={<RequiredLabel>Street Address</RequiredLabel>}
+        street={street}
+        error={showValidation && !street}
+        onAddressParsed={({ street: s, city: c, state: st, county: co }) => {
+          if (s !== undefined) setStreet(s);
+          if (c) setCity(c);
+          if (st) setState(st);
+          if (co) setCounty(co);
+        }}
+      />
       <div className="grid grid-cols-3 gap-3">
         <TextInput label={<RequiredLabel>City</RequiredLabel>} value={city} onChange={setCity} placeholder="City" error={showValidation && !city} />
         <SelectInput label={<RequiredLabel>State</RequiredLabel>} value={state} onChange={setState} options={US_STATES} placeholder="Select..." error={showValidation && !state} />
